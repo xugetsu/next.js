@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use turbo_tasks::{
     event::{Event, EventListener},
     util::SharedError,
-    CellId, KeyValuePair, SharedReference, TaskId, ValueTypeId,
+    CellId, KeyValuePair, TaskId, TypedSharedReference, ValueTypeId,
 };
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,7 +103,7 @@ impl InProgressCellState {
     }
 }
 
-#[derive(Debug, Clone, KeyValuePair)]
+#[derive(Debug, Clone, KeyValuePair, Serialize, Deserialize)]
 pub enum CachedDataItem {
     // Output
     Output {
@@ -131,7 +131,7 @@ pub enum CachedDataItem {
     // Cells
     CellData {
         cell: CellId,
-        value: SharedReference,
+        value: TypedSharedReference,
     },
     CellTypeMaxIndex {
         cell_type: ValueTypeId,
@@ -195,14 +195,17 @@ pub enum CachedDataItem {
     },
 
     // Transient Root Type
+    #[serde(skip)]
     AggregateRoot {
         value: RootState,
     },
 
     // Transient In Progress state
+    #[serde(skip)]
     InProgress {
         value: InProgressState,
     },
+    #[serde(skip)]
     InProgressCell {
         cell: CellId,
         value: InProgressCellState,
@@ -225,6 +228,7 @@ pub enum CachedDataItem {
     },
 
     // Transient Error State
+    #[serde(skip)]
     Error {
         value: SharedError,
     },
@@ -335,11 +339,7 @@ impl CachedDataItemValue {
 
 #[derive(Debug)]
 pub struct CachedDataUpdate {
-    // TODO persistence
-    #[allow(dead_code)]
     pub task: TaskId,
-    #[allow(dead_code)]
     pub key: CachedDataItemKey,
-    #[allow(dead_code)]
     pub value: Option<CachedDataItemValue>,
 }
