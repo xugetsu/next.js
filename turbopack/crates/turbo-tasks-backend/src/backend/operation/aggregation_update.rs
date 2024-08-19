@@ -542,7 +542,6 @@ impl AggregationUpdateQueue {
                         #[allow(clippy::collapsible_if, reason = "readablility")]
                         if task.has_key(&CachedDataItemKey::Dirty {}) {
                             if task.add(CachedDataItem::new_scheduled(description)) {
-                                let _span = tracing::trace_span!("dirty task in root").entered();
                                 ctx.turbo_tasks.schedule(task_id);
                             }
                         }
