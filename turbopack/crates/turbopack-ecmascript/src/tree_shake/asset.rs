@@ -9,10 +9,7 @@ use turbopack_core::{
     resolve::ModulePart,
 };
 
-use super::{
-    chunk_item::EcmascriptModulePartChunkItem, get_part_id, part_of_module, split, split_module,
-    Key, SplitResult,
-};
+use super::{chunk_item::EcmascriptModulePartChunkItem, get_part_id, Key, SplitResult};
 use crate::{
     chunk::{EcmascriptChunkPlaceable, EcmascriptExports},
     parse::ParseResult,
@@ -34,17 +31,19 @@ pub struct EcmascriptModulePartAsset {
 #[turbo_tasks::value_impl]
 impl EcmascriptParsable for EcmascriptModulePartAsset {
     #[turbo_tasks::function]
-    async fn failsafe_parse(self: Vc<Self>) -> Result<Vc<ParseResult>> {
+    async fn failsafe_parse(
+        self: Vc<Self>,
+        part: Option<Vc<ModulePart>>,
+    ) -> Result<Vc<ParseResult>> {
         let this = self.await?;
 
-        let parsed = this.full_module.failsafe_parse();
-        let split_data = split(this.full_module.ident(), this.full_module.source(), parsed);
-        Ok(part_of_module(split_data, this.part))
+        Ok(this.full_module.failsafe_parse(Some(this.part)))
     }
 
     #[turbo_tasks::function]
     async fn parse_original(self: Vc<Self>) -> Result<Vc<ParseResult>> {
-        Ok(self.await?.full_module.parse_original())
+        let this = self.await?;
+        Ok(this.full_module.parse_original())
     }
 
     #[turbo_tasks::function]
@@ -119,7 +118,7 @@ impl Module for EcmascriptModulePartAsset {
     #[turbo_tasks::function]
     async fn ident(&self) -> Result<Vc<AssetIdent>> {
         let inner = self.full_module.ident();
-        let result = split_module(self.full_module);
+        let result = self.full_module.split();
 
         match &*result.await? {
             SplitResult::Ok { .. } => Ok(inner.with_part(self.part)),
@@ -129,7 +128,7 @@ impl Module for EcmascriptModulePartAsset {
 
     #[turbo_tasks::function]
     async fn references(&self) -> Result<Vc<ModuleReferences>> {
-        let split_data = split_module(self.full_module).await?;
+        let split_data = self.full_module.split().await?;
 
         let analyze = analyze(self.full_module, self.part).await?;
 

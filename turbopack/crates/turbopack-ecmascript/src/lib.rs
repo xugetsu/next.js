@@ -33,8 +33,13 @@ pub mod utils;
 pub mod webpack;
 pub mod worker_chunk;
 
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    future::Future,
+    sync::Arc,
+};
 
+use analyzer::graph::EvalContext;
 use anyhow::Result;
 use chunk::EcmascriptChunkItem;
 use code_gen::CodeGenerateable;
@@ -45,10 +50,16 @@ use references::esm::UrlRewriteBehavior;
 pub use references::{AnalyzeEcmascriptModuleResult, TURBOPACK_HELPER};
 use serde::{Deserialize, Serialize};
 pub use static_code::StaticEcmascriptCode;
+use swc_comments::ImmutableComments;
 use swc_core::{
-    common::GLOBALS,
+    base::SwcComments,
+    common::{
+        errors::{Handler, HANDLER},
+        GLOBALS,
+    },
     ecma::{
         codegen::{text_writer::JsWriter, Emitter},
+        transforms::base::helpers::{Helpers, HELPERS},
         visit::{VisitMutWith, VisitMutWithAstPath},
     },
 };
@@ -56,10 +67,13 @@ pub use transform::{
     CustomTransformer, EcmascriptInputTransform, EcmascriptInputTransforms, OptionTransformPlugin,
     TransformContext, TransformPlugin, UnsupportedServerActionIssue,
 };
+use tree_shake::{part_of_module, split, SplitResult};
 use turbo_tasks::{
-    trace::TraceRawVcs, RcStr, ReadRef, TaskInput, TryJoinIterExt, Value, ValueToString, Vc,
+    trace::TraceRawVcs, util::WrapFuture, RcStr, ReadRef, TaskInput, TryJoinIterExt, Value,
+    ValueToString, Vc,
 };
 use turbo_tasks_fs::{rope::Rope, FileJsonContent, FileSystemPath};
+use turbo_tasks_hash::hash_xxh3_hash64;
 use turbopack_core::{
     asset::{Asset, AssetContent},
     chunk::{
@@ -80,6 +94,7 @@ use turbopack_core::{
 };
 // TODO remove this
 pub use turbopack_resolve::ecmascript as resolve;
+use turbopack_swc_utils::emitter::IssueEmitter;
 
 use self::{
     chunk::{EcmascriptChunkItemContent, EcmascriptChunkType, EcmascriptExports},
@@ -144,6 +159,11 @@ pub struct EcmascriptOptions {
     /// If false, they will reference the whole directory. If true, they won't
     /// reference anything and lead to an runtime error instead.
     pub ignore_dynamic_requests: bool,
+
+    /// The list of export names that should make tree shaking bail off. This is
+    /// required because tree shaking can split imports like `export const
+    /// runtime = 'edge'` as a separate module.
+    pub special_exports: Vc<Vec<RcStr>>,
 }
 
 #[turbo_tasks::value(serialization = "auto_for_input")]
@@ -191,7 +211,8 @@ pub struct EcmascriptModuleAssetBuilder {
     source: Vc<Box<dyn Source>>,
     asset_context: Vc<Box<dyn AssetContext>>,
     ty: EcmascriptModuleAssetType,
-    transforms: Vc<EcmascriptInputTransforms>,
+    module_transforms: Vc<EcmascriptInputTransforms>,
+    fragment_transforms: Vc<EcmascriptInputTransforms>,
     options: Vc<EcmascriptOptions>,
     compile_time_info: Vc<CompileTimeInfo>,
     inner_assets: Option<Vc<InnerAssets>>,
@@ -214,7 +235,8 @@ impl EcmascriptModuleAssetBuilder {
                 self.source,
                 self.asset_context,
                 Value::new(self.ty),
-                self.transforms,
+                self.module_transforms,
+                self.fragment_transforms,
                 self.options,
                 self.compile_time_info,
                 inner_assets,
@@ -224,7 +246,8 @@ impl EcmascriptModuleAssetBuilder {
                 self.source,
                 self.asset_context,
                 Value::new(self.ty),
-                self.transforms,
+                self.module_transforms,
+                self.fragment_transforms,
                 self.options,
                 self.compile_time_info,
             )
@@ -247,13 +270,19 @@ pub struct EcmascriptModuleAsset {
     pub options: Vc<EcmascriptOptions>,
     pub compile_time_info: Vc<CompileTimeInfo>,
     pub inner_assets: Option<Vc<InnerAssets>>,
+    pub fragment_transforms: Vc<EcmascriptInputTransforms>,
     #[turbo_tasks(debug_ignore)]
     last_successful_parse: turbo_tasks::TransientState<ReadRef<ParseResult>>,
 }
 
 #[turbo_tasks::value_trait]
 pub trait EcmascriptParsable {
-    fn failsafe_parse(self: Vc<Self>) -> Result<Vc<ParseResult>>;
+    /// This function accpets `part` because we need to apply some transforms after splitting the
+    /// module.
+    ///
+    /// If we don't accept `part`, we would need a way to ensure that all callers of
+    /// `failsafe_parse` applies the same transforms.
+    fn failsafe_parse(self: Vc<Self>, part: Option<Vc<ModulePart>>) -> Result<Vc<ParseResult>>;
 
     fn parse_original(self: Vc<Self>) -> Result<Vc<ParseResult>>;
 
@@ -288,7 +317,8 @@ impl EcmascriptModuleAsset {
     pub fn builder(
         source: Vc<Box<dyn Source>>,
         asset_context: Vc<Box<dyn AssetContext>>,
-        transforms: Vc<EcmascriptInputTransforms>,
+        module_transforms: Vc<EcmascriptInputTransforms>,
+        fragment_transforms: Vc<EcmascriptInputTransforms>,
         options: Vc<EcmascriptOptions>,
         compile_time_info: Vc<CompileTimeInfo>,
     ) -> EcmascriptModuleAssetBuilder {
@@ -296,7 +326,8 @@ impl EcmascriptModuleAsset {
             source,
             asset_context,
             ty: EcmascriptModuleAssetType::Ecmascript,
-            transforms,
+            module_transforms,
+            fragment_transforms,
             options,
             compile_time_info,
             inner_assets: None,
@@ -336,8 +367,11 @@ impl ModuleTypeResult {
 #[turbo_tasks::value_impl]
 impl EcmascriptParsable for EcmascriptModuleAsset {
     #[turbo_tasks::function]
-    async fn failsafe_parse(self: Vc<Self>) -> Result<Vc<ParseResult>> {
-        let real_result = self.parse();
+    async fn failsafe_parse(
+        self: Vc<Self>,
+        part: Option<Vc<ModulePart>>,
+    ) -> Result<Vc<ParseResult>> {
+        let real_result = self.parse(part);
         let real_result_value = real_result.await?;
         let this = self.await?;
         let result_value = if matches!(*real_result_value, ParseResult::Ok { .. }) {
@@ -352,7 +386,7 @@ impl EcmascriptParsable for EcmascriptModuleAsset {
 
     #[turbo_tasks::function]
     async fn parse_original(self: Vc<Self>) -> Result<Vc<ParseResult>> {
-        Ok(self.failsafe_parse())
+        Ok(self.failsafe_parse(None))
     }
 
     #[turbo_tasks::function]
@@ -376,7 +410,7 @@ impl EcmascriptAnalyzable for EcmascriptModuleAsset {
     ) -> Result<Vc<EcmascriptModuleContent>> {
         let this = self.await?;
 
-        let parsed = self.parse();
+        let parsed = self.parse(None);
 
         Ok(EcmascriptModuleContent::new_without_analysis(
             parsed,
@@ -391,7 +425,7 @@ impl EcmascriptAnalyzable for EcmascriptModuleAsset {
         chunking_context: Vc<Box<dyn ChunkingContext>>,
         async_module_info: Option<Vc<AsyncModuleInfo>>,
     ) -> Result<Vc<EcmascriptModuleContent>> {
-        let parsed = self.parse().resolve().await?;
+        let parsed = self.parse(None).resolve().await?;
 
         let analyze = self.analyze().await?;
 
@@ -421,6 +455,7 @@ impl EcmascriptModuleAsset {
 
         ty: Value<EcmascriptModuleAssetType>,
         transforms: Vc<EcmascriptInputTransforms>,
+        fragment_transforms: Vc<EcmascriptInputTransforms>,
         options: Vc<EcmascriptOptions>,
         compile_time_info: Vc<CompileTimeInfo>,
     ) -> Vc<Self> {
@@ -429,6 +464,7 @@ impl EcmascriptModuleAsset {
             asset_context,
             ty: ty.into_value(),
             transforms,
+            fragment_transforms,
             options,
 
             compile_time_info,
@@ -443,7 +479,7 @@ impl EcmascriptModuleAsset {
         asset_context: Vc<Box<dyn AssetContext>>,
         ty: Value<EcmascriptModuleAssetType>,
         transforms: Vc<EcmascriptInputTransforms>,
-
+        fragment_transforms: Vc<EcmascriptInputTransforms>,
         options: Vc<EcmascriptOptions>,
         compile_time_info: Vc<CompileTimeInfo>,
         inner_assets: Vc<InnerAssets>,
@@ -453,6 +489,7 @@ impl EcmascriptModuleAsset {
             asset_context,
             ty: ty.into_value(),
             transforms,
+            fragment_transforms,
             options,
             compile_time_info,
             inner_assets: Some(inner_assets),
@@ -476,8 +513,35 @@ impl EcmascriptModuleAsset {
     }
 
     #[turbo_tasks::function]
-    pub fn parse(&self) -> Vc<ParseResult> {
-        parse(self.source, Value::new(self.ty), self.transforms)
+    pub async fn split(self: Vc<Self>) -> Result<Vc<SplitResult>> {
+        let this = self.await?;
+        let parsed = parse(this.source, Value::new(this.ty), this.transforms);
+
+        Ok(split(
+            this.source.ident(),
+            this.source,
+            parsed,
+            this.options.await?.special_exports,
+        ))
+    }
+
+    #[turbo_tasks::function]
+    pub async fn parse(self: Vc<Self>, part: Option<Vc<ModulePart>>) -> Result<Vc<ParseResult>> {
+        let this = self.await?;
+        let parsed = parse(this.source, Value::new(this.ty), this.transforms);
+
+        let parsed = if let Some(part) = part {
+            let split_data = self.split();
+            part_of_module(split_data, part)
+        } else {
+            parsed
+        };
+
+        Ok(apply_transforms(
+            this.source,
+            parsed,
+            this.fragment_transforms,
+        ))
     }
 
     #[turbo_tasks::function]
@@ -916,6 +980,99 @@ async fn gen_content_with_visitors(
         }
         .cell()),
     }
+}
+
+#[turbo_tasks::function]
+async fn apply_transforms(
+    source: Vc<Box<dyn Source>>,
+    parsed: Vc<ParseResult>,
+    transforms: Vc<EcmascriptInputTransforms>,
+) -> Result<Vc<ParseResult>> {
+    let transforms = &*transforms.await?;
+
+    let ParseResult::Ok {
+        program,
+        comments,
+        eval_context,
+        globals,
+        source_map,
+        top_level_mark,
+    } = &*parsed.await?
+    else {
+        return Ok(parsed);
+    };
+
+    let merged_comments = SwcComments::default();
+    for c in comments.leading.iter() {
+        merged_comments.leading.insert(*c.0, c.1.clone());
+    }
+    for c in comments.trailing.iter() {
+        merged_comments.trailing.insert(*c.0, c.1.clone());
+    }
+
+    let handler = Handler::with_emitter(
+        true,
+        false,
+        Box::new(IssueEmitter::new(
+            source,
+            source_map.clone(),
+            Some("Ecmascript file had an error".into()),
+        )),
+    );
+
+    // TODO: Optimize this
+    let fs_path_vc = source.ident().path();
+    let fs_path = &*fs_path_vc.await?;
+    let file_path_hash = hash_xxh3_hash64(&*source.ident().to_string().await?) as u128;
+
+    WrapFuture::new(
+        async {
+            let mut program = program.clone();
+
+            let transform_context = TransformContext {
+                comments: &merged_comments,
+                source_map,
+                top_level_mark: *top_level_mark,
+                unresolved_mark: eval_context.unresolved_mark,
+                file_path_str: &fs_path.path,
+                file_name_str: fs_path.file_name(),
+                file_name_hash: file_path_hash,
+                file_path: fs_path_vc,
+            };
+
+            let span = tracing::trace_span!("transforms");
+            for transform in transforms.iter() {
+                transform.apply(&mut program, &transform_context).await?;
+            }
+            drop(span);
+
+            let comments = Arc::new(ImmutableComments::new(merged_comments));
+
+            let eval_context = EvalContext::new(
+                &program,
+                eval_context.unresolved_mark,
+                *top_level_mark,
+                Some(&comments),
+                Some(source),
+            );
+
+            Ok(ParseResult::Ok {
+                program,
+                comments: comments.clone(),
+                eval_context,
+                globals: globals.clone(),
+                source_map: source_map.clone(),
+                top_level_mark: *top_level_mark,
+            }
+            .cell())
+        },
+        |f, cx| {
+            GLOBALS.set(globals, || {
+                HANDLER.set(&handler, || HELPERS.set(&Helpers::new(true), || f.poll(cx)))
+            })
+        },
+    )
+    .await
 }
 
 pub fn register() {

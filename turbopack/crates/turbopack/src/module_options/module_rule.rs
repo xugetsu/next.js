@@ -90,6 +90,8 @@ pub enum ModuleRuleEffect {
     ExtendEcmascriptTransforms {
         prepend: Vc<EcmascriptInputTransforms>,
         append: Vc<EcmascriptInputTransforms>,
+
+        append_after_split: Vc<EcmascriptInputTransforms>,
     },
     SourceTransforms(Vc<SourceTransforms>),
 }
@@ -98,12 +100,14 @@ pub enum ModuleRuleEffect {
 #[derive(Hash, Debug, Copy, Clone)]
 pub enum ModuleType {
     Ecmascript {
-        transforms: Vc<EcmascriptInputTransforms>,
+        module_transforms: Vc<EcmascriptInputTransforms>,
+        fragment_transforms: Vc<EcmascriptInputTransforms>,
         #[turbo_tasks(trace_ignore)]
         options: Vc<EcmascriptOptions>,
     },
     Typescript {
-        transforms: Vc<EcmascriptInputTransforms>,
+        module_transforms: Vc<EcmascriptInputTransforms>,
+        fragment_transforms: Vc<EcmascriptInputTransforms>,
         // parse JSX syntax.
         tsx: bool,
         // follow references to imported types.
@@ -112,7 +116,8 @@ pub enum ModuleType {
         options: Vc<EcmascriptOptions>,
     },
     TypescriptDeclaration {
-        transforms: Vc<EcmascriptInputTransforms>,
+        module_transforms: Vc<EcmascriptInputTransforms>,
+        fragment_transforms: Vc<EcmascriptInputTransforms>,
         #[turbo_tasks(trace_ignore)]
         options: Vc<EcmascriptOptions>,
     },
