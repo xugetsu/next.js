@@ -1,11 +1,11 @@
 use std::path::MAIN_SEPARATOR;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use indexmap::{indexmap, map::Entry, IndexMap};
 use next_core::{
     all_assets_from_entries,
     app_structure::find_app_dir,
-    get_edge_chunking_context, get_edge_chunking_context_with_client_assets,
+    emit_assets, get_edge_chunking_context, get_edge_chunking_context_with_client_assets,
     get_edge_compile_time_info, get_edge_resolve_options_context,
     instrumentation::instrumentation_files,
     middleware::middleware_files,
@@ -29,37 +29,36 @@ use turbo_tasks::{
     Completion, Completions, IntoTraitRef, RcStr, State, TaskInput, TraitRef, TransientInstance,
     TryFlatJoinIterExt, Value, Vc,
 };
-use turbopack_binding::{
-    turbo::{
-        tasks_env::{EnvMap, ProcessEnv},
-        tasks_fs::{DiskFileSystem, FileSystem, FileSystemPath, VirtualFileSystem},
+use turbo_tasks_env::{EnvMap, ProcessEnv};
+use turbo_tasks_fs::{DiskFileSystem, FileSystem, FileSystemPath, VirtualFileSystem};
+use turbopack::{evaluate_context::node_build_environment, ModuleAssetContext};
+use turbopack_core::{
+    changed::content_changed,
+    chunk::{
+        module_id_strategies::{DevModuleIdStrategy, ModuleIdStrategy},
+        ChunkingContext,
     },
-    turbopack::{
-        core::{
-            changed::content_changed,
-            chunk::ChunkingContext,
-            compile_time_info::CompileTimeInfo,
-            context::AssetContext,
-            diagnostics::DiagnosticExt,
-            file_source::FileSource,
-            issue::{Issue, IssueExt, IssueSeverity, IssueStage, OptionStyledString, StyledString},
-            output::{OutputAsset, OutputAssets},
-            resolve::{find_context_file, FindContextFileResult},
-            source::Source,
-            source_map::OptionSourceMap,
-            version::{Update, Version, VersionState, VersionedContent},
-            PROJECT_FILESYSTEM_NAME,
-        },
-        node::execution_context::ExecutionContext,
-        nodejs::NodeJsChunkingContext,
-        turbopack::{evaluate_context::node_build_environment, ModuleAssetContext},
-    },
+    compile_time_info::CompileTimeInfo,
+    context::AssetContext,
+    diagnostics::DiagnosticExt,
+    file_source::FileSource,
+    issue::{Issue, IssueExt, IssueSeverity, IssueStage, OptionStyledString, StyledString},
+    module::Modules,
+    output::{OutputAsset, OutputAssets},
+    resolve::{find_context_file, FindContextFileResult},
+    source::Source,
+    source_map::OptionSourceMap,
+    version::{Update, Version, VersionState, VersionedContent},
+    PROJECT_FILESYSTEM_NAME,
 };
+use turbopack_node::execution_context::ExecutionContext;
+use turbopack_nodejs::NodeJsChunkingContext;
 
 use crate::{
     app::{AppProject, OptionAppProject, ECMASCRIPT_CLIENT_TRANSITION_NAME},
     build,
     entrypoints::Entrypoints,
+    global_module_id_strategy::GlobalModuleIdStrategyBuilder,
     instrumentation::InstrumentationEndpoint,
     middleware::MiddlewareEndpoint,
     pages::PagesProject,
@@ -175,7 +174,7 @@ pub struct Instrumentation {
 #[turbo_tasks::value]
 pub struct ProjectContainer {
     options_state: State<ProjectOptions>,
-    versioned_content_map: Vc<VersionedContentMap>,
+    versioned_content_map: Option<Vc<VersionedContentMap>>,
 }
 
 #[turbo_tasks::value_impl]
@@ -183,8 +182,10 @@ impl ProjectContainer {
     #[turbo_tasks::function]
     pub fn new(options: ProjectOptions) -> Vc<Self> {
         ProjectContainer {
+            // we only need to enable versioning in dev mode, since build
+            // is assumed to be operating over a static snapshot
+            versioned_content_map: options.dev.then(VersionedContentMap::new),
             options_state: State::new(options),
-            versioned_content_map: VersionedContentMap::new(),
         }
         .cell()
     }
@@ -326,25 +327,19 @@ impl ProjectContainer {
         self.project().hmr_identifiers()
     }
 
-    #[turbo_tasks::function]
-    pub async fn get_versioned_content(
-        self: Vc<Self>,
-        file_path: Vc<FileSystemPath>,
-    ) -> Result<Vc<Box<dyn VersionedContent>>> {
-        let this = self.await?;
-        Ok(this.versioned_content_map.get(file_path))
-    }
-
+    /// Gets a source map for a particular `file_path`. If `dev` mode is
+    /// disabled, this will always return [`OptionSourceMap::none`].
     #[turbo_tasks::function]
     pub async fn get_source_map(
         self: Vc<Self>,
         file_path: Vc<FileSystemPath>,
         section: Option<RcStr>,
     ) -> Result<Vc<OptionSourceMap>> {
-        let this = self.await?;
-        Ok(this
-            .versioned_content_map
-            .get_source_map(file_path, section))
+        Ok(if let Some(map) = self.await?.versioned_content_map {
+            map.get_source_map(file_path, section)
+        } else {
+            OptionSourceMap::none()
+        })
     }
 }
 
@@ -380,7 +375,7 @@ pub struct Project {
 
     mode: Vc<NextMode>,
 
-    versioned_content_map: Vc<VersionedContentMap>,
+    versioned_content_map: Option<Vc<VersionedContentMap>>,
 
     build_id: RcStr,
 
@@ -453,7 +448,7 @@ impl Issue for ConflictIssue {
 #[turbo_tasks::value_impl]
 impl Project {
     #[turbo_tasks::function]
-    async fn app_project(self: Vc<Self>) -> Result<Vc<OptionAppProject>> {
+    pub async fn app_project(self: Vc<Self>) -> Result<Vc<OptionAppProject>> {
         let app_dir = find_app_dir(self.project_path()).await?;
 
         Ok(Vc::cell(
@@ -462,7 +457,7 @@ impl Project {
     }
 
     #[turbo_tasks::function]
-    async fn pages_project(self: Vc<Self>) -> Result<Vc<PagesProject>> {
+    pub async fn pages_project(self: Vc<Self>) -> Result<Vc<PagesProject>> {
         Ok(PagesProject::new(self))
     }
 
@@ -631,6 +626,7 @@ impl Project {
             self.next_config().computed_asset_prefix(),
             self.client_compile_time_info().environment(),
             self.next_mode(),
+            self.module_id_strategy(),
         ))
     }
 
@@ -647,6 +643,7 @@ impl Project {
                 self.client_relative_path(),
                 self.next_config().computed_asset_prefix(),
                 self.server_compile_time_info().environment(),
+                self.module_id_strategy(),
             )
         } else {
             get_server_chunking_context(
@@ -654,6 +651,7 @@ impl Project {
                 self.project_path(),
                 self.node_root(),
                 self.server_compile_time_info().environment(),
+                self.module_id_strategy(),
             )
         }
     }
@@ -671,6 +669,7 @@ impl Project {
                 self.client_relative_path(),
                 self.next_config().computed_asset_prefix(),
                 self.edge_compile_time_info().environment(),
+                self.module_id_strategy(),
             )
         } else {
             get_edge_chunking_context(
@@ -678,6 +677,7 @@ impl Project {
                 self.project_path(),
                 self.node_root(),
                 self.edge_compile_time_info().environment(),
+                self.module_id_strategy(),
             )
         }
     }
@@ -930,11 +930,11 @@ impl Project {
             .as_ref()
             .map(|app_project| app_project.client_transition_name());
 
-        let context = self.middleware_context();
+        let middleware_asset_context = self.middleware_context();
 
         Ok(MiddlewareEndpoint::new(
             self,
-            context,
+            middleware_asset_context,
             source,
             app_dir,
             ecmascript_client_reference_transition_name,
@@ -1044,7 +1044,7 @@ impl Project {
             .as_ref()
             .map(|app_project| app_project.client_transition_name());
 
-        let context = if is_edge {
+        let instrumentation_asset_context = if is_edge {
             self.edge_instrumentation_context()
         } else {
             self.node_instrumentation_context()
@@ -1052,7 +1052,7 @@ impl Project {
 
         Ok(InstrumentationEndpoint::new(
             self,
-            context,
+            instrumentation_asset_context,
             source,
             is_edge,
             app_dir,
@@ -1072,14 +1072,23 @@ impl Project {
             let client_relative_path = self.client_relative_path();
             let node_root = self.node_root();
 
-            let completion = self.await?.versioned_content_map.insert_output_assets(
-                all_output_assets,
-                node_root,
-                client_relative_path,
-                node_root,
-            );
+            if let Some(map) = self.await?.versioned_content_map {
+                let completion = map.insert_output_assets(
+                    all_output_assets,
+                    node_root,
+                    client_relative_path,
+                    node_root,
+                );
 
-            Ok(completion)
+                Ok(completion)
+            } else {
+                Ok(emit_assets(
+                    *all_output_assets.await?,
+                    node_root,
+                    client_relative_path,
+                    node_root,
+                ))
+            }
         }
         .instrument(span)
         .await
@@ -1090,10 +1099,11 @@ impl Project {
         self: Vc<Self>,
         identifier: RcStr,
     ) -> Result<Vc<Box<dyn VersionedContent>>> {
-        Ok(self
-            .await?
-            .versioned_content_map
-            .get(self.client_relative_path().join(identifier)))
+        if let Some(map) = self.await?.versioned_content_map {
+            Ok(map.get(self.client_relative_path().join(identifier)))
+        } else {
+            bail!("must be in dev mode to hmr")
+        }
     }
 
     #[turbo_tasks::function]
@@ -1139,10 +1149,11 @@ impl Project {
     /// only needed for testing purposes and isn't used in real apps.
     #[turbo_tasks::function]
     pub async fn hmr_identifiers(self: Vc<Self>) -> Result<Vc<Vec<RcStr>>> {
-        Ok(self
-            .await?
-            .versioned_content_map
-            .keys_in_path(self.client_relative_path()))
+        if let Some(map) = self.await?.versioned_content_map {
+            Ok(map.keys_in_path(self.client_relative_path()))
+        } else {
+            bail!("must be in dev mode to hmr")
+        }
     }
 
     /// Completion when server side changes are detected in output assets
@@ -1159,6 +1170,29 @@ impl Project {
     pub fn client_changed(self: Vc<Self>, roots: Vc<OutputAssets>) -> Vc<Completion> {
         let path = self.client_root();
         any_output_changed(roots, path, false)
+    }
+
+    #[turbo_tasks::function]
+    pub async fn client_main_modules(self: Vc<Self>) -> Result<Vc<Modules>> {
+        let pages_project = self.pages_project();
+        let mut modules = vec![pages_project.client_main_module()];
+
+        if let Some(app_project) = *self.app_project().await? {
+            modules.push(app_project.client_main_module());
+        }
+
+        Ok(Vc::cell(modules))
+    }
+
+    /// Get the module id strategy for the project.
+    /// In production mode, we use the global module id strategy with optimized ids.
+    /// In development mode, we use a standard module id strategy with no modifications.
+    #[turbo_tasks::function]
+    pub async fn module_id_strategy(self: Vc<Self>) -> Result<Vc<Box<dyn ModuleIdStrategy>>> {
+        match *self.next_mode().await? {
+            NextMode::Build => Ok(Vc::upcast(GlobalModuleIdStrategyBuilder::build(self))),
+            NextMode::Development => Ok(Vc::upcast(DevModuleIdStrategy::new())),
+        }
     }
 }
 
