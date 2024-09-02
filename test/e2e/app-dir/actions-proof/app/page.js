@@ -3,13 +3,13 @@ import { inc, double, log } from './actions'
 export default function Page() {
   return (
     <>
-      <button id="inc" onClick={() => console.log(inc(1))}>
+      <button id="inc" onClick={inc}>
         inc
       </button>
-      <button id="double" onClick={() => console.log(double(1))}>
+      <button id="double" onClick={double}>
         double
       </button>
-      <button id="log" onClick={() => log(1)}>
+      <button id="log" onClick={log}>
         log
       </button>
     </>
