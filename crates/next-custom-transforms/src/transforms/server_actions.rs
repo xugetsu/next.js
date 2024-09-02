@@ -864,8 +864,8 @@ impl<C: Comments> VisitMut for ServerActions<C> {
                                 false
                             }
                         }) {
-                            new.push(stmt);
-                            continue;
+                            // new.push(stmt);
+                            // continue;
                         }
 
                         if named.src.is_some() {
@@ -1292,12 +1292,15 @@ fn is_turbopack_fake_export(with: &ObjectLit) -> bool {
                 }
 
                 if key.sym == "__turbopack_part__" {
-                    if let Expr::Lit(Lit::Str(Str { value, .. })) = &**value {
-                        if value.starts_with("export ") {
-                            return false;
+                    match &**value {
+                        Expr::Lit(Lit::Num(..)) => return true,
+                        Expr::Lit(Lit::Str(Str { value, .. })) => {
+                            if value.starts_with("export ") {
+                                // return false;
+                            }
                         }
+                        _ => (),
                     }
-                    return true;
                 }
             }
         }
