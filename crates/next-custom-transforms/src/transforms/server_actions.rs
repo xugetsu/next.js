@@ -114,7 +114,17 @@ struct ServerActions<C: Comments> {
     annotations: Vec<Stmt>,
     extra_items: Vec<ModuleItem>,
     export_actions: Vec<String>,
-
+    /// Skip exports that are excluded.
+    //// This logic handles the fake exports like below.
+    ///
+    ///
+    /// ```js
+    /// import { foo } from '__TURBOPACK_PART__' with {
+    ///      __turbopack_part__: 1,
+    /// }
+    ///
+    /// export { foo }
+    /// ```
     excluded_exports: FxHashSet<Id>,
 }
 
@@ -832,31 +842,6 @@ impl<C: Comments> VisitMut for ServerActions<C> {
                             .as_deref()
                             .map_or(false, is_turbopack_fake_export)
                         {
-                            new.push(stmt);
-                            continue;
-                        }
-
-                        // Skip exports that are excluded.
-                        // This logic handles the fake exports like below.
-                        //
-                        //
-                        // import { foo } from '__TURBOPACK_PART__' with {
-                        //      __turbopack_part__: 1,
-                        // }
-                        //
-                        // export { foo }
-                        //
-                        if named.specifiers.iter().any(|s| {
-                            if let ExportSpecifier::Named(ExportNamedSpecifier {
-                                orig: ModuleExportName::Ident(ident),
-                                ..
-                            }) = s
-                            {
-                                self.excluded_exports.contains(&ident.to_id())
-                            } else {
-                                false
-                            }
-                        }) {
                             new.push(stmt);
                             continue;
                         }
