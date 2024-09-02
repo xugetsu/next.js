@@ -800,6 +800,13 @@ impl<C: Comments> VisitMut for ServerActions<C> {
         let mut new = Vec::with_capacity(stmts.len());
 
         for mut stmt in stmts.take() {
+            if let ModuleItem::ModuleDecl(ModuleDecl::Import(i)) = &stmt {
+                if i.with.as_deref().map_or(false, is_turbopack_fake_export) {
+                    new.push(stmt);
+                    continue;
+                }
+            }
+
             // For action file, it's not allowed to export things other than async
             // functions.
             if self.in_action_file {
@@ -842,6 +849,21 @@ impl<C: Comments> VisitMut for ServerActions<C> {
                             .as_deref()
                             .map_or(false, is_turbopack_fake_export)
                         {
+                            new.push(stmt);
+                            continue;
+                        }
+
+                        if named.specifiers.iter().any(|s| {
+                            if let ExportSpecifier::Named(ExportNamedSpecifier {
+                                orig: ModuleExportName::Ident(ident),
+                                ..
+                            }) = s
+                            {
+                                self.excluded_exports.contains(&ident.to_id())
+                            } else {
+                                false
+                            }
+                        }) {
                             new.push(stmt);
                             continue;
                         }
