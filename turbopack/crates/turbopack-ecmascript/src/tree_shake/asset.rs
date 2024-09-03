@@ -33,7 +33,7 @@ impl EcmascriptParsable for EcmascriptModulePartAsset {
     #[turbo_tasks::function]
     async fn failsafe_parse(
         self: Vc<Self>,
-        part: Option<Vc<ModulePart>>,
+        _part: Option<Vc<ModulePart>>,
     ) -> Result<Vc<ParseResult>> {
         let this = self.await?;
 
