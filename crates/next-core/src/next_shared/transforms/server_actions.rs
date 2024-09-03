@@ -29,7 +29,6 @@ pub fn get_server_actions_transform_rule(
         vec![ModuleRuleEffect::ExtendEcmascriptTransforms {
             prepend: Vc::cell(vec![]),
             append: Vc::cell(vec![transformer]),
-            append_after_split: Vc::cell(vec![]),
         }],
     )
 }

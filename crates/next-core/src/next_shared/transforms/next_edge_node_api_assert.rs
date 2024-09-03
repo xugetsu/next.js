@@ -23,7 +23,6 @@ pub fn next_edge_node_api_assert(
         vec![ModuleRuleEffect::ExtendEcmascriptTransforms {
             prepend: Vc::cell(vec![]),
             append: Vc::cell(vec![transformer]),
-            append_after_split: Vc::cell(vec![]),
         }],
     )
 }

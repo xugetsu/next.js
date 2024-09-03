@@ -34,7 +34,6 @@ pub fn get_next_page_static_info_assert_rule(
         vec![ModuleRuleEffect::ExtendEcmascriptTransforms {
             prepend: Vc::cell(vec![transformer]),
             append: Vc::cell(vec![]),
-            append_after_split: Vc::cell(vec![]),
         }],
     )
 }

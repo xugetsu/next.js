@@ -90,8 +90,6 @@ pub enum ModuleRuleEffect {
     ExtendEcmascriptTransforms {
         prepend: Vc<EcmascriptInputTransforms>,
         append: Vc<EcmascriptInputTransforms>,
-
-        append_after_split: Vc<EcmascriptInputTransforms>,
     },
     SourceTransforms(Vc<SourceTransforms>),
 }

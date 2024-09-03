@@ -25,7 +25,6 @@ pub fn get_next_optimize_server_react_rule(
         vec![ModuleRuleEffect::ExtendEcmascriptTransforms {
             prepend: Vc::cell(vec![]),
             append: Vc::cell(vec![transformer]),
-            append_after_split: Vc::cell(vec![]),
         }],
     )
 }

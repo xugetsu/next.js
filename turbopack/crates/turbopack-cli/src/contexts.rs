@@ -150,7 +150,6 @@ async fn get_client_module_options_context(
                 )) as _)),
             ]),
             append: Vc::cell(vec![]),
-            append_after_split: Vc::cell(vec![]),
         }],
     );
 

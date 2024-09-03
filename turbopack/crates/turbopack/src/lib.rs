@@ -510,11 +510,7 @@ async fn process_default_internal(
                     ModuleRuleEffect::ModuleType(module) => {
                         current_module_type = Some(*module);
                     }
-                    ModuleRuleEffect::ExtendEcmascriptTransforms {
-                        prepend,
-                        append,
-                        append_after_split,
-                    } => {
+                    ModuleRuleEffect::ExtendEcmascriptTransforms { prepend, append } => {
                         current_module_type = match current_module_type {
                             Some(ModuleType::Ecmascript {
                                 module_transforms: transforms,
@@ -522,8 +518,7 @@ async fn process_default_internal(
                                 options,
                             }) => Some(ModuleType::Ecmascript {
                                 module_transforms: prepend.extend(transforms).extend(*append),
-                                fragment_transforms: fragment_transforms
-                                    .extend(*append_after_split),
+                                fragment_transforms,
                                 options,
                             }),
                             Some(ModuleType::Typescript {
@@ -534,8 +529,7 @@ async fn process_default_internal(
                                 options,
                             }) => Some(ModuleType::Typescript {
                                 module_transforms: prepend.extend(transforms).extend(*append),
-                                fragment_transforms: fragment_transforms
-                                    .extend(*append_after_split),
+                                fragment_transforms,
                                 tsx,
                                 analyze_types,
                                 options,
