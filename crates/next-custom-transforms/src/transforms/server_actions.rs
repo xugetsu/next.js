@@ -1051,12 +1051,14 @@ impl<C: Comments> VisitMut for ServerActions<C> {
                     let action_id =
                         generate_action_id(&self.config.hash_salt, &self.file_name, export_name);
 
+                    let span = Span::dummy_with_cmt();
+                    self.comments.add_pure_comment(span.lo);
                     if export_name == "default" {
                         let export_expr = ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(
                             ExportDefaultExpr {
-                                span: DUMMY_SP,
+                                span,
                                 expr: Box::new(Expr::Call(CallExpr {
-                                    span: DUMMY_SP,
+                                    span,
                                     callee: Callee::Expr(Box::new(Expr::Ident(
                                         create_ref_ident.clone(),
                                     ))),
@@ -1080,7 +1082,7 @@ impl<C: Comments> VisitMut for ServerActions<C> {
                                                 .into(),
                                         ),
                                         init: Some(Box::new(Expr::Call(CallExpr {
-                                            span: DUMMY_SP,
+                                            span,
                                             callee: Callee::Expr(Box::new(Expr::Ident(
                                                 create_ref_ident.clone(),
                                             ))),
