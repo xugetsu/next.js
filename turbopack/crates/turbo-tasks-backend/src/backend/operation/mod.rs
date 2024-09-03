@@ -345,6 +345,7 @@ impl AnyOperation {
             AnyOperation::ConnectChild(op) => op.execute(ctx),
             AnyOperation::Invalidate(op) => op.execute(ctx),
             AnyOperation::CleanupOldEdges(op) => op.execute(ctx),
+            AnyOperation::AggregationUpdate(op) => op.execute(ctx),
             AnyOperation::Nested(ops) => {
                 for op in ops {
                     op.execute(ctx);
