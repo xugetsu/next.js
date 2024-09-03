@@ -5,7 +5,6 @@ use std::{
 };
 
 use hex::encode as hex_encode;
-use rustc_hash::FxHashSet;
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use swc_core::{
@@ -69,8 +68,6 @@ pub fn server_actions<C: Comments>(
         annotations: Default::default(),
         extra_items: Default::default(),
         export_actions: Default::default(),
-
-        excluded_exports: Default::default(),
     })
 }
 
@@ -114,18 +111,6 @@ struct ServerActions<C: Comments> {
     annotations: Vec<Stmt>,
     extra_items: Vec<ModuleItem>,
     export_actions: Vec<String>,
-    /// Skip exports that are excluded.
-    //// This logic handles the fake exports like below.
-    ///
-    ///
-    /// ```js
-    /// import { foo } from '__TURBOPACK_PART__' with {
-    ///      __turbopack_part__: 1,
-    /// }
-    ///
-    /// export { foo }
-    /// ```
-    excluded_exports: FxHashSet<Id>,
 }
 
 impl<C: Comments> ServerActions<C> {
@@ -787,26 +772,10 @@ impl<C: Comments> VisitMut for ServerActions<C> {
             self.config.enabled,
         );
 
-        for stmt in stmts.iter() {
-            if let ModuleItem::ModuleDecl(ModuleDecl::Import(i)) = stmt {
-                if i.with.as_deref().map_or(false, is_turbopack_fake_export) {
-                    self.excluded_exports
-                        .extend(i.specifiers.iter().map(|s| s.local().to_id()));
-                }
-            }
-        }
-
         let old_annotations = self.annotations.take();
         let mut new = Vec::with_capacity(stmts.len());
 
         for mut stmt in stmts.take() {
-            if let ModuleItem::ModuleDecl(ModuleDecl::Import(i)) = &stmt {
-                if i.with.as_deref().map_or(false, is_turbopack_fake_export) {
-                    new.push(stmt);
-                    continue;
-                }
-            }
-
             // For action file, it's not allowed to export things other than async
             // functions.
             if self.in_action_file {
@@ -844,30 +813,6 @@ impl<C: Comments> VisitMut for ServerActions<C> {
                         }
                     }
                     ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(named)) => {
-                        if named
-                            .with
-                            .as_deref()
-                            .map_or(false, is_turbopack_fake_export)
-                        {
-                            new.push(stmt);
-                            continue;
-                        }
-
-                        if named.specifiers.iter().any(|s| {
-                            if let ExportSpecifier::Named(ExportNamedSpecifier {
-                                orig: ModuleExportName::Ident(ident),
-                                ..
-                            }) = s
-                            {
-                                self.excluded_exports.contains(&ident.to_id())
-                            } else {
-                                false
-                            }
-                        }) {
-                            // new.push(stmt);
-                            // continue;
-                        }
-
                         if named.src.is_some() {
                             disallowed_export_span = named.span;
                         } else {
@@ -1278,36 +1223,6 @@ impl<C: Comments> VisitMut for ServerActions<C> {
     }
 
     noop_visit_mut_type!();
-}
-
-fn is_turbopack_fake_export(with: &ObjectLit) -> bool {
-    for prop in with.props.iter() {
-        if let PropOrSpread::Prop(prop) = prop {
-            if let Prop::KeyValue(KeyValueProp {
-                key: PropName::Ident(key),
-                value,
-                ..
-            }) = &**prop
-            {
-                if key.sym == "__turbopack_var__" {
-                    return true;
-                }
-
-                if key.sym == "__turbopack_part__" {
-                    match &**value {
-                        Expr::Lit(Lit::Num(..)) => return true,
-                        Expr::Lit(Lit::Str(Str { value, .. })) => {
-                            if value.starts_with("export ") {
-                                // return false;
-                            }
-                        }
-                        _ => (),
-                    }
-                }
-            }
-        }
-    }
-    false
 }
 
 fn retain_names_from_declared_idents(child_names: &mut Vec<Name>, current_declared_idents: &[Id]) {
