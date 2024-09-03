@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use indexmap::IndexSet;
 use rustc_hash::FxHashMap;
 use swc_core::{
-    common::{util::take::Take, SyntaxContext, DUMMY_SP, GLOBALS},
+    common::{comments::Comments, util::take::Take, SyntaxContext, DUMMY_SP, GLOBALS},
     ecma::{
         ast::{
             ExportAll, ExportNamedSpecifier, Expr, ExprStmt, Id, Ident, ImportDecl, Lit, Module,
@@ -65,11 +65,12 @@ fn get_var<'a>(map: &'a FxHashMap<Id, VarState>, id: &Id) -> Cow<'a, VarState> {
 impl Analyzer<'_> {
     pub(super) fn analyze(
         module: &Module,
+        comments: &dyn Comments,
         unresolved_ctxt: SyntaxContext,
         top_level_ctxt: SyntaxContext,
     ) -> (DepGraph, FxHashMap<ItemId, ItemData>) {
         let mut g = DepGraph::default();
-        let (item_ids, mut items) = g.init(module, unresolved_ctxt, top_level_ctxt);
+        let (item_ids, mut items) = g.init(module, comments, unresolved_ctxt, top_level_ctxt);
 
         let mut analyzer = Analyzer {
             g: &mut g,
@@ -474,6 +475,7 @@ pub(super) async fn split(
             let (mut dep_graph, items) = GLOBALS.set(globals, || {
                 Analyzer::analyze(
                     module,
+                    comments,
                     SyntaxContext::empty().apply_mark(eval_context.unresolved_mark),
                     SyntaxContext::empty().apply_mark(eval_context.top_level_mark),
                 )

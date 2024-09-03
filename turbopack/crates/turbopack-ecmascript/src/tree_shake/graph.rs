@@ -11,7 +11,7 @@ use petgraph::{
 };
 use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
 use swc_core::{
-    common::{util::take::Take, SyntaxContext, DUMMY_SP},
+    common::{comments::Comments, util::take::Take, Spanned, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
             op, ClassDecl, ClassExpr, Decl, DefaultDecl, EsReserved, ExportAll, ExportDecl,
@@ -557,6 +557,7 @@ impl DepGraph {
     pub(super) fn init(
         &mut self,
         module: &Module,
+        comments: &dyn Comments,
         unresolved_ctxt: SyntaxContext,
         top_level_ctxt: SyntaxContext,
     ) -> (Vec<ItemId>, FxHashMap<ItemId, ItemData>) {
@@ -996,6 +997,11 @@ impl DepGraph {
                         };
                         ids.push(id.clone());
 
+                        let pure = match &decl.init {
+                            Some(e) => comments.has_flag(e.span().lo, "PURE"),
+                            _ => false,
+                        };
+
                         let decl_ids: Vec<Id> = find_pat_ids(&decl.name);
                         let mut vars = ids_used_by_ignoring_nested(
                             &decl.init,
@@ -1024,6 +1030,7 @@ impl DepGraph {
                         items.insert(
                             id,
                             ItemData {
+                                pure,
                                 var_decls: decl_ids.clone().into_iter().collect(),
                                 read_vars: vars.read,
                                 eventual_read_vars: eventual_vars.read,

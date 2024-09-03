@@ -10,7 +10,7 @@ use indexmap::IndexSet;
 use rustc_hash::FxHasher;
 use serde::Deserialize;
 use swc_core::{
-    common::{util::take::Take, Mark, SourceMap, SyntaxContext},
+    common::{comments::SingleThreadedComments, util::take::Take, Mark, SourceMap, SyntaxContext},
     ecma::{
         ast::{EsVersion, Id, Module},
         atoms::JsWord,
@@ -52,6 +52,7 @@ fn run(input: PathBuf) {
     testing::run_test(false, |cm, _handler| {
         let fm = cm.load_file(&input).unwrap();
 
+        let comments = SingleThreadedComments::default();
         let mut module = parse_file_as_module(
             &fm,
             swc_core::ecma::parser::Syntax::Es(EsSyntax {
@@ -59,7 +60,7 @@ fn run(input: PathBuf) {
                 ..Default::default()
             }),
             EsVersion::latest(),
-            None,
+            Some(&comments),
             &mut vec![],
         )
         .unwrap();
@@ -76,7 +77,7 @@ fn run(input: PathBuf) {
         ));
 
         let mut g = DepGraph::default();
-        let (item_ids, mut items) = g.init(&module, unresolved_ctxt, top_level_ctxt);
+        let (item_ids, mut items) = g.init(&module, &comments, unresolved_ctxt, top_level_ctxt);
 
         let mut s = String::new();
 
