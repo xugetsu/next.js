@@ -110,8 +110,7 @@ pub(crate) struct ItemData {
 
     pub content: ModuleItem,
 
-    /// Export 0 as 1
-    pub export: Option<(Id, JsWord)>,
+    pub export: Option<JsWord>,
 }
 
 impl fmt::Debug for ItemData {
@@ -328,25 +327,17 @@ impl DepGraph {
             for item in group {
                 match item {
                     ItemId::Group(ItemIdGroupKind::Export(..)) => {
-                        if let Some((local, export)) = &data[item].export {
+                        if let Some(export) = &data[item].export {
                             exports.insert(Key::Export(export.as_str().into()), ix as u32);
 
                             let s = ExportSpecifier::Named(ExportNamedSpecifier {
                                 span: DUMMY_SP,
                                 orig: ModuleExportName::Ident(Ident::new(
-                                    local.0.clone(),
+                                    export.clone(),
                                     DUMMY_SP,
-                                    local.1,
+                                    Default::default(),
                                 )),
-                                exported: if *export == local.0 {
-                                    None
-                                } else {
-                                    Some(ModuleExportName::Ident(Ident::new(
-                                        export.clone(),
-                                        DUMMY_SP,
-                                        Default::default(),
-                                    )))
-                                },
+                                exported: None,
                                 is_type_only: false,
                             });
                             exports_module.body.push(ModuleItem::ModuleDecl(
@@ -602,42 +593,25 @@ impl DepGraph {
                             );
                         }
 
-                        fn may_escape(s: &str) -> String {
-                            match Ident::verify_symbol(s) {
-                                Ok(()) => s.into(),
-                                Err(_) => magic_identifier::mangle(s),
-                            }
-                        }
-
                         for (si, s) in item.specifiers.iter().enumerate() {
-                            let (orig, local, exported) = match s {
+                            let (orig, mut local, exported) = match s {
                                 ExportSpecifier::Named(s) => (
                                     Some(s.orig.clone()),
                                     match &s.orig {
-                                        ModuleExportName::Ident(i) => {
-                                            Ident::new(may_escape(&i.sym).into(), i.span, i.ctxt)
-                                        }
+                                        ModuleExportName::Ident(i) => i.clone(),
                                         ModuleExportName::Str(..) => quote_ident!("_tmp").into(),
                                     },
                                     s.exported.clone().unwrap_or_else(|| s.orig.clone()),
                                 ),
-                                ExportSpecifier::Default(s) => {
-                                    let ident = Ident::new_private(
-                                        magic_identifier::mangle("default export").into(),
+                                ExportSpecifier::Default(s) => (
+                                    Some(ModuleExportName::Ident(Ident::new(
+                                        "default".into(),
                                         DUMMY_SP,
-                                    );
-
-                                    (
-                                        Some(ModuleExportName::Ident(
-                                            quote_ident!("default").into(),
-                                        )),
-                                        ident,
-                                        ModuleExportName::Ident(Ident::new_no_ctxt(
-                                            may_escape(&s.exported.sym).into(),
-                                            DUMMY_SP,
-                                        )),
-                                    )
-                                }
+                                        Default::default(),
+                                    ))),
+                                    quote_ident!("default").into(),
+                                    ModuleExportName::Ident(s.exported.clone()),
+                                ),
                                 ExportSpecifier::Namespace(s) => (
                                     None,
                                     match &s.name {
@@ -647,6 +621,13 @@ impl DepGraph {
                                     s.name.clone(),
                                 ),
                             };
+
+                            if item.src.is_some() {
+                                local.sym =
+                                    magic_identifier::mangle(&format!("reexport {}", local.sym))
+                                        .into();
+                                local = local.into_private();
+                            }
 
                             exports.push((local.to_id(), exported.atom().clone()));
 
@@ -1152,10 +1133,7 @@ impl DepGraph {
                             exported: if local.0 == export_name {
                                 None
                             } else {
-                                Some(ModuleExportName::Ident(Ident::new_no_ctxt(
-                                    export_name.clone(),
-                                    DUMMY_SP,
-                                )))
+                                Some(ModuleExportName::Ident(export_name.clone().into()))
                             },
                             is_type_only: false,
                         })],
@@ -1164,7 +1142,7 @@ impl DepGraph {
                         with: None,
                     })),
                     read_vars: [local.clone()].into_iter().collect(),
-                    export: Some((local.clone(), export_name.clone())),
+                    export: Some(export_name),
                     ..Default::default()
                 },
             );
