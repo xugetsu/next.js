@@ -349,11 +349,15 @@ impl DepGraph {
                                         local.1,
                                     ))
                                 },
-                                exported: Some(ModuleExportName::Ident(Ident::new(
-                                    export.clone(),
-                                    DUMMY_SP,
-                                    Default::default(),
-                                ))),
+                                exported: if *export == local.0 || export == "default" {
+                                    None
+                                } else {
+                                    Some(ModuleExportName::Ident(Ident::new(
+                                        export.clone(),
+                                        DUMMY_SP,
+                                        Default::default(),
+                                    )))
+                                },
                                 is_type_only: false,
                             });
                             exports_module.body.push(ModuleItem::ModuleDecl(
