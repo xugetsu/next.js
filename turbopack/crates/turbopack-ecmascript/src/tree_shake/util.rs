@@ -487,14 +487,6 @@ struct ShouldSkip {
 }
 
 impl Visit for ShouldSkip {
-    fn visit_stmt(&mut self, n: &Stmt) {
-        if self.skip {
-            return;
-        }
-
-        n.visit_children_with(self);
-    }
-
     fn visit_await_expr(&mut self, n: &AwaitExpr) {
         // __turbopack_wasm_module__ is not analyzable because __turbopack_wasm_module__
         // is injected global.
@@ -507,6 +499,27 @@ impl Visit for ShouldSkip {
                 self.skip = true;
                 return;
             }
+        }
+
+        n.visit_children_with(self);
+    }
+
+    fn visit_expr(&mut self, n: &Expr) {
+        if self.skip {
+            return;
+        }
+
+        if n.is_ident_ref_to("__turbopack_refresh__") {
+            self.skip = true;
+            return;
+        }
+
+        n.visit_children_with(self);
+    }
+
+    fn visit_stmt(&mut self, n: &Stmt) {
+        if self.skip {
+            return;
         }
 
         n.visit_children_with(self);
