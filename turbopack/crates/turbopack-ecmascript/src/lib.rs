@@ -371,7 +371,7 @@ impl EcmascriptParsable for EcmascriptModuleAsset {
         self: Vc<Self>,
         part: Option<Vc<ModulePart>>,
     ) -> Result<Vc<ParseResult>> {
-        let real_result = self.parse(part);
+        let real_result = self.parse_raw();
         let real_result_value = real_result.await?;
         let this = self.await?;
         let result_value = if matches!(*real_result_value, ParseResult::Ok { .. }) {
@@ -381,7 +381,10 @@ impl EcmascriptParsable for EcmascriptModuleAsset {
             let state_ref = this.last_successful_parse.get();
             state_ref.as_ref().unwrap_or(&real_result_value).clone()
         };
-        Ok(ReadRef::cell(result_value))
+
+        let parsed = ReadRef::cell(result_value);
+
+        Ok(self.apply_part_and_transforms(parsed, part))
     }
 
     #[turbo_tasks::function]
@@ -515,7 +518,7 @@ impl EcmascriptModuleAsset {
     #[turbo_tasks::function]
     pub async fn split(self: Vc<Self>) -> Result<Vc<SplitResult>> {
         let this = self.await?;
-        let parsed = parse(this.source, Value::new(this.ty), this.transforms);
+        let parsed = self.parse_raw();
 
         Ok(split(
             this.source.ident(),
@@ -526,9 +529,26 @@ impl EcmascriptModuleAsset {
     }
 
     #[turbo_tasks::function]
-    pub async fn parse(self: Vc<Self>, part: Option<Vc<ModulePart>>) -> Result<Vc<ParseResult>> {
+    async fn parse_raw(self: Vc<Self>) -> Result<Vc<ParseResult>> {
         let this = self.await?;
         let parsed = parse(this.source, Value::new(this.ty), this.transforms);
+        Ok(parsed)
+    }
+
+    #[turbo_tasks::function]
+    pub async fn parse(self: Vc<Self>, part: Option<Vc<ModulePart>>) -> Result<Vc<ParseResult>> {
+        let parsed = self.parse_raw();
+
+        Ok(self.apply_part_and_transforms(parsed, part))
+    }
+
+    #[turbo_tasks::function]
+    async fn apply_part_and_transforms(
+        self: Vc<Self>,
+        parsed: Vc<ParseResult>,
+        part: Option<Vc<ModulePart>>,
+    ) -> Result<Vc<ParseResult>> {
+        let this = self.await?;
 
         let parsed = if let Some(part) = part {
             let split_data = self.split();
