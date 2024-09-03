@@ -516,9 +516,8 @@ impl EcmascriptModuleAsset {
     }
 
     #[turbo_tasks::function]
-    pub async fn split(self: Vc<Self>) -> Result<Vc<SplitResult>> {
+    pub async fn split(self: Vc<Self>, parsed: Vc<ParseResult>) -> Result<Vc<SplitResult>> {
         let this = self.await?;
-        let parsed = self.parse_raw();
 
         Ok(split(
             this.source.ident(),
@@ -551,7 +550,7 @@ impl EcmascriptModuleAsset {
         let this = self.await?;
 
         let parsed = if let Some(part) = part {
-            let split_data = self.split();
+            let split_data = self.split(parsed);
             part_of_module(split_data, part)
         } else {
             parsed
