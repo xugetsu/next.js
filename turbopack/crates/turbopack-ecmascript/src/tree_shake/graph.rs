@@ -15,11 +15,10 @@ use swc_core::{
     ecma::{
         ast::{
             op, ClassDecl, ClassExpr, Decl, DefaultDecl, EsReserved, ExportAll, ExportDecl,
-            ExportDefaultExpr, ExportNamedSpecifier, ExportSpecifier, Expr, ExprStmt, FnDecl,
-            FnExpr, Id, Ident, IdentName, ImportDecl, ImportNamedSpecifier, ImportSpecifier,
-            ImportStarAsSpecifier, KeyValueProp, Lit, Module, ModuleDecl, ModuleExportName,
-            ModuleItem, NamedExport, ObjectLit, Prop, PropName, PropOrSpread, Stmt, VarDecl,
-            VarDeclKind, VarDeclarator,
+            ExportNamedSpecifier, ExportSpecifier, Expr, ExprStmt, FnDecl, FnExpr, Id, Ident,
+            IdentName, ImportDecl, ImportNamedSpecifier, ImportSpecifier, ImportStarAsSpecifier,
+            KeyValueProp, Lit, Module, ModuleDecl, ModuleExportName, ModuleItem, NamedExport,
+            ObjectLit, Prop, PropName, PropOrSpread, Stmt, VarDecl, VarDeclKind, VarDeclarator,
         },
         atoms::JsWord,
         utils::{find_pat_ids, private_ident, quote_ident},
@@ -334,22 +333,12 @@ impl DepGraph {
 
                             let s = ExportSpecifier::Named(ExportNamedSpecifier {
                                 span: DUMMY_SP,
-                                orig: if export == "default" {
-                                    // references/mod.rs makes some assumptions about default
-                                    // exports.
-                                    ModuleExportName::Ident(Ident::new(
-                                        "default".into(),
-                                        DUMMY_SP,
-                                        Default::default(),
-                                    ))
-                                } else {
-                                    ModuleExportName::Ident(Ident::new(
-                                        local.0.clone(),
-                                        DUMMY_SP,
-                                        local.1,
-                                    ))
-                                },
-                                exported: if *export == local.0 || export == "default" {
+                                orig: ModuleExportName::Ident(Ident::new(
+                                    local.0.clone(),
+                                    DUMMY_SP,
+                                    local.1,
+                                )),
+                                exported: if *export == local.0 {
                                     None
                                 } else {
                                     Some(ModuleExportName::Ident(Ident::new(
@@ -1155,32 +1144,25 @@ impl DepGraph {
             items.insert(
                 id.clone(),
                 ItemData {
-                    content: if export_name == "default" {
-                        ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(ExportDefaultExpr {
+                    content: ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(NamedExport {
+                        span: DUMMY_SP,
+                        specifiers: vec![ExportSpecifier::Named(ExportNamedSpecifier {
                             span: DUMMY_SP,
-                            expr: local.clone().into(),
-                        }))
-                    } else {
-                        ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(NamedExport {
-                            span: DUMMY_SP,
-                            specifiers: vec![ExportSpecifier::Named(ExportNamedSpecifier {
-                                span: DUMMY_SP,
-                                orig: ModuleExportName::Ident(local.clone().into()),
-                                exported: if local.0 == export_name {
-                                    None
-                                } else {
-                                    Some(ModuleExportName::Ident(Ident::new_no_ctxt(
-                                        export_name.clone(),
-                                        DUMMY_SP,
-                                    )))
-                                },
-                                is_type_only: false,
-                            })],
-                            src: None,
-                            type_only: false,
-                            with: None,
-                        }))
-                    },
+                            orig: ModuleExportName::Ident(local.clone().into()),
+                            exported: if local.0 == export_name {
+                                None
+                            } else {
+                                Some(ModuleExportName::Ident(Ident::new_no_ctxt(
+                                    export_name.clone(),
+                                    DUMMY_SP,
+                                )))
+                            },
+                            is_type_only: false,
+                        })],
+                        src: None,
+                        type_only: false,
+                        with: None,
+                    })),
                     read_vars: [local.clone()].into_iter().collect(),
                     export: Some((local.clone(), export_name.clone())),
                     ..Default::default()
