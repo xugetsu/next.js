@@ -294,7 +294,10 @@ async fn parse_actions(module: Vc<Box<dyn Module>>) -> Result<Vc<OptionActionMap
     {
         if matches!(
             &*module.await?.part.await?,
-            ModulePart::Evaluation | ModulePart::Exports | ModulePart::Facade
+            ModulePart::Evaluation
+                | ModulePart::Exports
+                | ModulePart::Facade
+                | ModulePart::Internal(..)
         ) {
             return Ok(OptionActionMap::none());
         }
