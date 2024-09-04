@@ -56,7 +56,6 @@ pub use transform::{
     CustomTransformer, EcmascriptInputTransform, EcmascriptInputTransforms, OptionTransformPlugin,
     TransformContext, TransformPlugin, UnsupportedServerActionIssue,
 };
-use tree_shake::{part_of_module, split, SplitResult};
 use turbo_tasks::{
     trace::TraceRawVcs, RcStr, ReadRef, TaskInput, TryJoinIterExt, Value, ValueToString, Vc,
 };
@@ -145,7 +144,6 @@ pub struct EcmascriptOptions {
     /// If false, they will reference the whole directory. If true, they won't
     /// reference anything and lead to an runtime error instead.
     pub ignore_dynamic_requests: bool,
-
     /// The list of export names that should make tree shaking bail off. This is
     /// required because tree shaking can split imports like `export const
     /// runtime = 'edge'` as a separate module.
@@ -259,12 +257,7 @@ pub struct EcmascriptModuleAsset {
 
 #[turbo_tasks::value_trait]
 pub trait EcmascriptParsable {
-    /// This function accpets `part` because we need to apply some transforms after splitting the
-    /// module.
-    ///
-    /// If we don't accept `part`, we would need a way to ensure that all callers of
-    /// `failsafe_parse` applies the same transforms.
-    fn failsafe_parse(self: Vc<Self>, part: Option<Vc<ModulePart>>) -> Result<Vc<ParseResult>>;
+    fn failsafe_parse(self: Vc<Self>) -> Result<Vc<ParseResult>>;
 
     fn parse_original(self: Vc<Self>) -> Result<Vc<ParseResult>>;
 
@@ -347,11 +340,8 @@ impl ModuleTypeResult {
 #[turbo_tasks::value_impl]
 impl EcmascriptParsable for EcmascriptModuleAsset {
     #[turbo_tasks::function]
-    async fn failsafe_parse(
-        self: Vc<Self>,
-        part: Option<Vc<ModulePart>>,
-    ) -> Result<Vc<ParseResult>> {
-        let real_result = self.parse_raw();
+    async fn failsafe_parse(self: Vc<Self>) -> Result<Vc<ParseResult>> {
+        let real_result = self.parse();
         let real_result_value = real_result.await?;
         let this = self.await?;
         let result_value = if matches!(*real_result_value, ParseResult::Ok { .. }) {
@@ -361,15 +351,12 @@ impl EcmascriptParsable for EcmascriptModuleAsset {
             let state_ref = this.last_successful_parse.get();
             state_ref.as_ref().unwrap_or(&real_result_value).clone()
         };
-
-        let parsed = ReadRef::cell(result_value);
-
-        Ok(self.apply_part(parsed, part))
+        Ok(ReadRef::cell(result_value))
     }
 
     #[turbo_tasks::function]
     async fn parse_original(self: Vc<Self>) -> Result<Vc<ParseResult>> {
-        Ok(self.failsafe_parse(None))
+        Ok(self.failsafe_parse())
     }
 
     #[turbo_tasks::function]
@@ -393,7 +380,7 @@ impl EcmascriptAnalyzable for EcmascriptModuleAsset {
     ) -> Result<Vc<EcmascriptModuleContent>> {
         let this = self.await?;
 
-        let parsed = self.parse(None);
+        let parsed = self.parse();
 
         Ok(EcmascriptModuleContent::new_without_analysis(
             parsed,
@@ -408,7 +395,7 @@ impl EcmascriptAnalyzable for EcmascriptModuleAsset {
         chunking_context: Vc<Box<dyn ChunkingContext>>,
         async_module_info: Option<Vc<AsyncModuleInfo>>,
     ) -> Result<Vc<EcmascriptModuleContent>> {
-        let parsed = self.parse(None).resolve().await?;
+        let parsed = self.parse().resolve().await?;
 
         let analyze = self.analyze().await?;
 
@@ -492,43 +479,8 @@ impl EcmascriptModuleAsset {
     }
 
     #[turbo_tasks::function]
-    pub async fn split(self: Vc<Self>, parsed: Vc<ParseResult>) -> Result<Vc<SplitResult>> {
-        let this = self.await?;
-
-        Ok(split(
-            this.source.ident(),
-            this.source,
-            parsed,
-            this.options.await?.special_exports,
-        ))
-    }
-
-    #[turbo_tasks::function]
-    async fn parse_raw(self: Vc<Self>) -> Result<Vc<ParseResult>> {
-        let this = self.await?;
-        let parsed = parse(this.source, Value::new(this.ty), this.transforms);
-        Ok(parsed)
-    }
-
-    #[turbo_tasks::function]
-    pub async fn parse(self: Vc<Self>, part: Option<Vc<ModulePart>>) -> Result<Vc<ParseResult>> {
-        let parsed = self.parse_raw();
-
-        Ok(self.apply_part(parsed, part))
-    }
-
-    #[turbo_tasks::function]
-    async fn apply_part(
-        self: Vc<Self>,
-        parsed: Vc<ParseResult>,
-        part: Option<Vc<ModulePart>>,
-    ) -> Result<Vc<ParseResult>> {
-        Ok(if let Some(part) = part {
-            let split_data = self.split(parsed);
-            part_of_module(split_data, part)
-        } else {
-            parsed
-        })
+    pub fn parse(&self) -> Vc<ParseResult> {
+        parse(self.source, Value::new(self.ty), self.transforms)
     }
 
     #[turbo_tasks::function]

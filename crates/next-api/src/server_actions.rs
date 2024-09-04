@@ -315,7 +315,7 @@ async fn parse_actions(module: Vc<Box<dyn Module>>) -> Result<Vc<OptionActionMap
 
     let ParseResult::Ok {
         program: fragment, ..
-    } = &*ecmascript_asset.failsafe_parse(None).await?
+    } = &*ecmascript_asset.failsafe_parse().await?
     else {
         // The file might be be parse-able, but this is reported separately.
         return Ok(OptionActionMap::none());
