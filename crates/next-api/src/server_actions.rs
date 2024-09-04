@@ -28,12 +28,16 @@ use turbopack_core::{
     module::Module,
     output::OutputAsset,
     reference::primary_referenced_modules,
-    reference_type::{EcmaScriptModulesReferenceSubType, ReferenceType},
+    reference_type::{
+        EcmaScriptModulesReferenceSubType, ReferenceType, TypeScriptReferenceSubType,
+    },
+    resolve::ModulePart,
     virtual_output::VirtualOutputAsset,
     virtual_source::VirtualSource,
 };
 use turbopack_ecmascript::{
-    chunk::EcmascriptChunkPlaceable, parse::ParseResult, EcmascriptParsable,
+    chunk::EcmascriptChunkPlaceable, parse::ParseResult,
+    tree_shake::asset::EcmascriptModulePartAsset, EcmascriptModuleAssetType, EcmascriptParsable,
 };
 
 /// Scans the RSC entry point's full module graph looking for exported Server
@@ -286,6 +290,16 @@ async fn parse_actions(module: Vc<Box<dyn Module>>) -> Result<Vc<OptionActionMap
         return Ok(OptionActionMap::none());
     };
 
+    if let Some(module) = Vc::try_resolve_downcast_type::<EcmascriptModulePartAsset>(module).await?
+    {
+        if matches!(
+            &*module.await?.part.await?,
+            ModulePart::Evaluation | ModulePart::Exports | ModulePart::Facade
+        ) {
+            return Ok(OptionActionMap::none());
+        }
+    }
+
     let ParseResult::Ok {
         program: original,
         comments,
@@ -306,6 +320,7 @@ async fn parse_actions(module: Vc<Box<dyn Module>>) -> Result<Vc<OptionActionMap
         // The file might be be parse-able, but this is reported separately.
         return Ok(OptionActionMap::none());
     };
+
     let all_exports = all_export_names(fragment);
     actions.retain(|_, name| all_exports.iter().any(|export| export == name));
 

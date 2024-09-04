@@ -24,7 +24,7 @@ use crate::{
 #[turbo_tasks::value]
 pub struct EcmascriptModulePartAsset {
     pub full_module: Vc<EcmascriptModuleAsset>,
-    pub(crate) part: Vc<ModulePart>,
+    pub part: Vc<ModulePart>,
     pub(crate) import_externals: bool,
 }
 
