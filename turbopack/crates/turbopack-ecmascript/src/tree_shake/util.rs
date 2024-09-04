@@ -527,6 +527,16 @@ impl Visit for ShouldSkip {
         n.visit_children_with(self);
     }
 
+    fn visit_import_decl(&mut self, n: &ImportDecl) {
+        // TODO(PACK-3233): Remove this after fixing the import order issue.
+        if n.src.value.ends_with(".css") {
+            self.skip = true;
+            return;
+        }
+
+        n.visit_children_with(self);
+    }
+
     fn visit_stmt(&mut self, n: &Stmt) {
         if self.skip {
             return;
