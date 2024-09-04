@@ -1,4 +1,4 @@
-use std::{any::Any, fmt::Debug, future::Future, hash::Hash};
+use std::{any::Any, fmt::Debug, future::Future, hash::Hash, time::Duration};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -42,7 +42,8 @@ impl_task_input! {
     usize,
     RcStr,
     TaskId,
-    ValueTypeId
+    ValueTypeId,
+    Duration
 }
 
 impl<T> TaskInput for Vec<T>

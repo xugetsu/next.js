@@ -1356,7 +1356,9 @@ export default async function build(
               dir,
             nextConfig: config,
             jsConfig: await getTurbopackJsConfig(dir, config),
-            watch: false,
+            watch: {
+              enable: false,
+            },
             dev,
             env: process.env as Record<string, string>,
             defineEnv: createDefineEnv({
