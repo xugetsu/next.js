@@ -109,17 +109,17 @@ async fn apply_module_type(
     let module_type = &*module_type.await?;
     Ok(ProcessResult::Module(match module_type {
         ModuleType::Ecmascript {
-            module_transforms,
+            transforms,
             options,
         }
         | ModuleType::Typescript {
-            module_transforms,
+            transforms,
             tsx: _,
             analyze_types: _,
             options,
         }
         | ModuleType::TypescriptDeclaration {
-            module_transforms,
+            transforms,
             options,
         } => {
             let context_for_module = match module_type {
@@ -134,7 +134,7 @@ async fn apply_module_type(
             let mut builder = EcmascriptModuleAsset::builder(
                 source,
                 Vc::upcast(context_for_module),
-                *module_transforms,
+                *transforms,
                 *options,
                 module_asset_context.compile_time_info(),
             );
@@ -509,19 +509,19 @@ async fn process_default_internal(
                     ModuleRuleEffect::ExtendEcmascriptTransforms { prepend, append } => {
                         current_module_type = match current_module_type {
                             Some(ModuleType::Ecmascript {
-                                module_transforms: transforms,
+                                transforms,
                                 options,
                             }) => Some(ModuleType::Ecmascript {
-                                module_transforms: prepend.extend(transforms).extend(*append),
+                                transforms: prepend.extend(transforms).extend(*append),
                                 options,
                             }),
                             Some(ModuleType::Typescript {
-                                module_transforms: transforms,
+                                transforms,
                                 tsx,
                                 analyze_types,
                                 options,
                             }) => Some(ModuleType::Typescript {
-                                module_transforms: prepend.extend(transforms).extend(*append),
+                                transforms: prepend.extend(transforms).extend(*append),
                                 tsx,
                                 analyze_types,
                                 options,

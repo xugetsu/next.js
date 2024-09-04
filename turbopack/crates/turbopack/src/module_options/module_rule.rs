@@ -98,12 +98,12 @@ pub enum ModuleRuleEffect {
 #[derive(Hash, Debug, Copy, Clone)]
 pub enum ModuleType {
     Ecmascript {
-        module_transforms: Vc<EcmascriptInputTransforms>,
+        transforms: Vc<EcmascriptInputTransforms>,
         #[turbo_tasks(trace_ignore)]
         options: Vc<EcmascriptOptions>,
     },
     Typescript {
-        module_transforms: Vc<EcmascriptInputTransforms>,
+        transforms: Vc<EcmascriptInputTransforms>,
         // parse JSX syntax.
         tsx: bool,
         // follow references to imported types.
@@ -112,7 +112,7 @@ pub enum ModuleType {
         options: Vc<EcmascriptOptions>,
     },
     TypescriptDeclaration {
-        module_transforms: Vc<EcmascriptInputTransforms>,
+        transforms: Vc<EcmascriptInputTransforms>,
         #[turbo_tasks(trace_ignore)]
         options: Vc<EcmascriptOptions>,
     },
