@@ -246,7 +246,7 @@ impl DepGraph {
         directives: &[ModuleItem],
         data: &FxHashMap<ItemId, ItemData>,
     ) -> SplitModuleResult {
-        let groups = self.finalize();
+        let groups = self.finalize(data);
         let mut exports = FxHashMap::default();
         let mut part_deps = FxHashMap::<_, Vec<_>>::default();
 
@@ -494,10 +494,26 @@ impl DepGraph {
     ///
     /// Note that [ModuleItem] and [Module] are represented as [ItemId] for
     /// performance.
-    pub(super) fn finalize(&self) -> InternedGraph<Vec<ItemId>> {
+    pub(super) fn finalize(
+        &self,
+        data: &FxHashMap<ItemId, ItemData>,
+    ) -> InternedGraph<Vec<ItemId>> {
         let graph = self.g.idx_graph.clone().into_graph::<u32>();
 
-        let condensed = condensation(graph, false);
+        let mut condensed = condensation(graph, false);
+
+        // Drop a group if all items in the group are pure
+        condensed.retain_nodes(|condensed, node| {
+            let is_all_pure = condensed[node]
+                .iter()
+                .map(|&ix| &self.g.graph_ix[ix as usize])
+                .all(|item| {
+                    let data = data.get(item).unwrap();
+                    data.pure
+                });
+
+            !is_all_pure
+        });
 
         let mut new_graph = InternedGraph::default();
         let mut done = FxHashSet::default();
