@@ -197,8 +197,7 @@ pub struct EcmascriptModuleAssetBuilder {
     source: Vc<Box<dyn Source>>,
     asset_context: Vc<Box<dyn AssetContext>>,
     ty: EcmascriptModuleAssetType,
-    module_transforms: Vc<EcmascriptInputTransforms>,
-    fragment_transforms: Vc<EcmascriptInputTransforms>,
+    transforms: Vc<EcmascriptInputTransforms>,
     options: Vc<EcmascriptOptions>,
     compile_time_info: Vc<CompileTimeInfo>,
     inner_assets: Option<Vc<InnerAssets>>,
@@ -221,8 +220,7 @@ impl EcmascriptModuleAssetBuilder {
                 self.source,
                 self.asset_context,
                 Value::new(self.ty),
-                self.module_transforms,
-                self.fragment_transforms,
+                self.transforms,
                 self.options,
                 self.compile_time_info,
                 inner_assets,
@@ -232,8 +230,7 @@ impl EcmascriptModuleAssetBuilder {
                 self.source,
                 self.asset_context,
                 Value::new(self.ty),
-                self.module_transforms,
-                self.fragment_transforms,
+                self.transforms,
                 self.options,
                 self.compile_time_info,
             )
@@ -256,7 +253,6 @@ pub struct EcmascriptModuleAsset {
     pub options: Vc<EcmascriptOptions>,
     pub compile_time_info: Vc<CompileTimeInfo>,
     pub inner_assets: Option<Vc<InnerAssets>>,
-    pub fragment_transforms: Vc<EcmascriptInputTransforms>,
     #[turbo_tasks(debug_ignore)]
     last_successful_parse: turbo_tasks::TransientState<ReadRef<ParseResult>>,
 }
@@ -304,7 +300,6 @@ impl EcmascriptModuleAsset {
         source: Vc<Box<dyn Source>>,
         asset_context: Vc<Box<dyn AssetContext>>,
         module_transforms: Vc<EcmascriptInputTransforms>,
-        fragment_transforms: Vc<EcmascriptInputTransforms>,
         options: Vc<EcmascriptOptions>,
         compile_time_info: Vc<CompileTimeInfo>,
     ) -> EcmascriptModuleAssetBuilder {
@@ -312,8 +307,7 @@ impl EcmascriptModuleAsset {
             source,
             asset_context,
             ty: EcmascriptModuleAssetType::Ecmascript,
-            module_transforms,
-            fragment_transforms,
+            transforms: module_transforms,
             options,
             compile_time_info,
             inner_assets: None,
@@ -444,7 +438,6 @@ impl EcmascriptModuleAsset {
 
         ty: Value<EcmascriptModuleAssetType>,
         transforms: Vc<EcmascriptInputTransforms>,
-        fragment_transforms: Vc<EcmascriptInputTransforms>,
         options: Vc<EcmascriptOptions>,
         compile_time_info: Vc<CompileTimeInfo>,
     ) -> Vc<Self> {
@@ -453,7 +446,6 @@ impl EcmascriptModuleAsset {
             asset_context,
             ty: ty.into_value(),
             transforms,
-            fragment_transforms,
             options,
 
             compile_time_info,
@@ -468,7 +460,6 @@ impl EcmascriptModuleAsset {
         asset_context: Vc<Box<dyn AssetContext>>,
         ty: Value<EcmascriptModuleAssetType>,
         transforms: Vc<EcmascriptInputTransforms>,
-        fragment_transforms: Vc<EcmascriptInputTransforms>,
         options: Vc<EcmascriptOptions>,
         compile_time_info: Vc<CompileTimeInfo>,
         inner_assets: Vc<InnerAssets>,
@@ -478,7 +469,6 @@ impl EcmascriptModuleAsset {
             asset_context,
             ty: ty.into_value(),
             transforms,
-            fragment_transforms,
             options,
             compile_time_info,
             inner_assets: Some(inner_assets),

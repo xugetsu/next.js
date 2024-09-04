@@ -110,19 +110,16 @@ async fn apply_module_type(
     Ok(ProcessResult::Module(match module_type {
         ModuleType::Ecmascript {
             module_transforms,
-            fragment_transforms,
             options,
         }
         | ModuleType::Typescript {
             module_transforms,
             tsx: _,
             analyze_types: _,
-            fragment_transforms,
             options,
         }
         | ModuleType::TypescriptDeclaration {
             module_transforms,
-            fragment_transforms,
             options,
         } => {
             let context_for_module = match module_type {
@@ -138,7 +135,6 @@ async fn apply_module_type(
                 source,
                 Vc::upcast(context_for_module),
                 *module_transforms,
-                *fragment_transforms,
                 *options,
                 module_asset_context.compile_time_info(),
             );
@@ -514,22 +510,18 @@ async fn process_default_internal(
                         current_module_type = match current_module_type {
                             Some(ModuleType::Ecmascript {
                                 module_transforms: transforms,
-                                fragment_transforms,
                                 options,
                             }) => Some(ModuleType::Ecmascript {
                                 module_transforms: prepend.extend(transforms).extend(*append),
-                                fragment_transforms,
                                 options,
                             }),
                             Some(ModuleType::Typescript {
                                 module_transforms: transforms,
-                                fragment_transforms,
                                 tsx,
                                 analyze_types,
                                 options,
                             }) => Some(ModuleType::Typescript {
                                 module_transforms: prepend.extend(transforms).extend(*append),
-                                fragment_transforms,
                                 tsx,
                                 analyze_types,
                                 options,
