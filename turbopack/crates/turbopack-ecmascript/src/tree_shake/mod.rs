@@ -434,6 +434,14 @@ pub(super) async fn split(
     parsed: Vc<ParseResult>,
     special_exports: Vc<Vec<RcStr>>,
 ) -> Result<Vc<SplitResult>> {
+    // Do not split already split module
+    if ident.await?.part.is_some() {
+        return Ok(SplitResult::Failed {
+            parse_result: parsed,
+        }
+        .cell());
+    }
+
     let parse_result = parsed.await?;
 
     match &*parse_result {
