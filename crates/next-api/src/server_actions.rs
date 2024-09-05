@@ -303,11 +303,13 @@ async fn parse_actions(module: Vc<Box<dyn Module>>) -> Result<Vc<OptionActionMap
         }
     }
 
+    let original_parsed = ecmascript_asset.parse_original().resolve().await?;
+
     let ParseResult::Ok {
         program: original,
         comments,
         ..
-    } = &*ecmascript_asset.parse_original().await?
+    } = &*original_parsed.await?
     else {
         return Ok(OptionActionMap::none());
     };
@@ -316,16 +318,20 @@ async fn parse_actions(module: Vc<Box<dyn Module>>) -> Result<Vc<OptionActionMap
         return Ok(OptionActionMap::none());
     };
 
-    let ParseResult::Ok {
-        program: fragment, ..
-    } = &*ecmascript_asset.failsafe_parse().await?
-    else {
-        // The file might be be parse-able, but this is reported separately.
-        return Ok(OptionActionMap::none());
-    };
+    let fragment = ecmascript_asset.failsafe_parse().resolve().await?;
 
-    let all_exports = all_export_names(fragment);
-    actions.retain(|_, name| all_exports.iter().any(|export| export == name));
+    if fragment != original_parsed {
+        let ParseResult::Ok {
+            program: fragment, ..
+        } = &*fragment.await?
+        else {
+            // The file might be be parse-able, but this is reported separately.
+            return Ok(OptionActionMap::none());
+        };
+
+        let all_exports = all_export_names(fragment);
+        actions.retain(|_, name| all_exports.iter().any(|export| export == name));
+    }
 
     let mut actions = IndexMap::from_iter(actions.into_iter());
     actions.sort_keys();
