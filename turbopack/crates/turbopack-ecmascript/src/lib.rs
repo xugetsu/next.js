@@ -147,6 +147,10 @@ pub struct EcmascriptOptions {
     /// The list of export names that should make tree shaking bail off. This is
     /// required because tree shaking can split imports like `export const
     /// runtime = 'edge'` as a separate module.
+    ///
+    /// Currently the analysis of these exports are statically verified by `NextPageStaticInfo`,
+    /// which is a `CustomTransformer` implementation and we don't have a way to apply it after
+    /// tree shaking.
     pub special_exports: Vc<Vec<RcStr>>,
 }
 
