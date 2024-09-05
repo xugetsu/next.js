@@ -56,6 +56,7 @@ pub use transform::{
     CustomTransformer, EcmascriptInputTransform, EcmascriptInputTransforms, OptionTransformPlugin,
     TransformContext, TransformPlugin, UnsupportedServerActionIssue,
 };
+use tree_shake::{split_module, SplitResult};
 use turbo_tasks::{
     trace::TraceRawVcs, RcStr, ReadRef, TaskInput, TryJoinIterExt, Value, ValueToString, Vc,
 };
@@ -239,10 +240,21 @@ impl EcmascriptModuleAssetBuilder {
         }
     }
 
-    pub async fn build_part(self, part: Vc<ModulePart>) -> Result<Vc<EcmascriptModulePartAsset>> {
+    pub async fn build_part(self, part: Vc<ModulePart>) -> Result<Vc<Box<dyn Module>>> {
         let import_externals = self.options.await?.import_externals;
         let base = self.build();
-        Ok(EcmascriptModulePartAsset::new(base, part, import_externals))
+
+        let split_result = split_module(base).await?;
+
+        if matches!(&*split_result, SplitResult::Failed { .. }) {
+            return Ok(Vc::upcast(base));
+        }
+
+        Ok(Vc::upcast(EcmascriptModulePartAsset::new(
+            base,
+            part,
+            import_externals,
+        )))
     }
 }
 
