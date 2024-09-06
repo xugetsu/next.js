@@ -21,7 +21,7 @@ use swc_core::{
             ObjectLit, Prop, PropName, PropOrSpread, Stmt, VarDecl, VarDeclKind, VarDeclarator,
         },
         atoms::JsWord,
-        utils::{find_pat_ids, private_ident, quote_ident},
+        utils::{find_pat_ids, private_ident, quote_ident, ExprCtx, ExprExt},
     },
 };
 use turbo_tasks::RcStr;
@@ -1018,7 +1018,13 @@ impl DepGraph {
                         vars.read.retain(|id| !decl_ids.contains(id));
                         eventual_vars.read.retain(|id| !decl_ids.contains(id));
 
-                        let side_effects = vars.found_unresolved;
+                        let side_effects = vars.found_unresolved
+                            || decl.init.as_deref().map_or(false, |e| {
+                                e.may_have_side_effects(&ExprCtx {
+                                    unresolved_ctxt,
+                                    is_unresolved_ref_safe: false,
+                                })
+                            });
 
                         let var_decl = Box::new(VarDecl {
                             decls: vec![decl.clone()],
