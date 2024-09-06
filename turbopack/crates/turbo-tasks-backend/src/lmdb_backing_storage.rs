@@ -11,7 +11,9 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use lmdb::{Database, DatabaseFlags, Environment, EnvironmentFlags, Transaction, WriteFlags};
+use lmdb::{
+    Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, Transaction, WriteFlags,
+};
 use tracing::Span;
 use turbo_tasks::{backend::CachedTaskType, KeyValuePair, TaskId};
 
@@ -85,9 +87,30 @@ impl LmdbBackingStorage {
             restored_cache_entries: AtomicUsize::new(0),
         })
     }
+
+    fn display_db(&self) -> Result<String> {
+        use std::fmt::Write;
+        let mut result = String::new();
+        let tx = self.env.begin_ro_txn()?;
+        let mut cursor = tx.open_ro_cursor(self.data_db)?;
+        for item_result in cursor.iter() {
+            let (key, value) = item_result?;
+            let task_id = u32::from_be_bytes(key.try_into()?);
+            let data: Vec<CachedDataItem> = pot::from_slice(value)?;
+            write!(result, "### Task {task_id}\n{data:#?}\n\n")?;
+        }
+        Ok(result)
+    }
 }
 
 impl BackingStorage for LmdbBackingStorage {
+    fn startup(&self) {
+        println!(
+            "Database content:\n{}",
+            self.display_db().unwrap_or_default()
+        );
+    }
+
     fn next_free_task_id(&self) -> TaskId {
         fn get(this: &LmdbBackingStorage) -> Result<u32> {
             let tx = this.env.begin_rw_txn()?;
@@ -388,6 +411,7 @@ impl BackingStorage for LmdbBackingStorage {
             .inspect_err(|err| println!("Looking up data for {task_id} failed: {err:?}"))
             .unwrap_or_default();
         if !result.is_empty() {
+            println!("restored {task_id}");
             self.restored_tasks
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
