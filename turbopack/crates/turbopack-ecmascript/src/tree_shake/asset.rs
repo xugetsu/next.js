@@ -11,7 +11,7 @@ use turbopack_core::{
 
 use super::{
     chunk_item::EcmascriptModulePartChunkItem, get_part_id, part_of_module, split, split_module,
-    Key, SplitResult,
+    Key, PartId, SplitResult,
 };
 use crate::{
     chunk::{EcmascriptChunkPlaceable, EcmascriptExports},
@@ -212,11 +212,16 @@ impl Module for EcmascriptModulePartAsset {
 
         let mut assets = deps
             .iter()
-            .map(|&part_id| {
+            .map(|part_id| {
                 Ok(Vc::upcast(SingleModuleReference::new(
                     Vc::upcast(EcmascriptModulePartAsset::new(
                         self.full_module,
-                        ModulePart::internal(part_id),
+                        match part_id {
+                            PartId::Internal(part_id) => ModulePart::internal(*part_id),
+                            PartId::Export(name) => ModulePart::export(name.clone()),
+                            PartId::ModuleEvaluation => ModulePart::evaluation(),
+                            PartId::Exports => ModulePart::exports(),
+                        },
                         self.import_externals,
                     )),
                     Vc::cell("ecmascript module part".into()),

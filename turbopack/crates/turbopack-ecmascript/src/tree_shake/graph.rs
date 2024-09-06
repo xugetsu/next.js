@@ -207,7 +207,7 @@ pub(super) struct SplitModuleResult {
     pub entrypoints: FxHashMap<Key, u32>,
 
     /// Dependency between parts.
-    pub part_deps: FxHashMap<u32, Vec<u32>>,
+    pub part_deps: FxHashMap<u32, Vec<PartId>>,
     pub modules: Vec<Module>,
 
     pub star_reexports: Vec<ExportAll>,
@@ -248,7 +248,7 @@ impl DepGraph {
     ) -> SplitModuleResult {
         let groups = self.finalize(data);
         let mut exports = FxHashMap::default();
-        let mut part_deps = FxHashMap::<_, Vec<_>>::default();
+        let mut part_deps = FxHashMap::<_, Vec<PartId>>::default();
 
         let star_reexports: Vec<_> = data
             .values()
@@ -270,6 +270,7 @@ impl DepGraph {
         }
 
         let mut declarator = FxHashMap::default();
+        let mut exporter = FxHashMap::default();
 
         for (ix, group) in groups.graph_ix.iter().enumerate() {
             for id in group {
@@ -277,6 +278,10 @@ impl DepGraph {
 
                 for var in item.var_decls.iter() {
                     declarator.entry(var.clone()).or_insert_with(|| ix as u32);
+                }
+
+                if let Some(export) = &item.export {
+                    exporter.insert(export.clone(), ix as u32);
                 }
             }
         }
@@ -388,7 +393,7 @@ impl DepGraph {
             }
 
             // Import variables
-            for var in required_vars {
+            for &var in &required_vars {
                 let Some(&dep) = declarator.get(var) else {
                     continue;
                 };
@@ -407,7 +412,10 @@ impl DepGraph {
                     is_type_only: false,
                 })];
 
-                part_deps.entry(ix as u32).or_default().push(dep);
+                part_deps
+                    .entry(ix as u32)
+                    .or_default()
+                    .push(PartId::Internal(dep));
 
                 chunk
                     .body
@@ -418,6 +426,38 @@ impl DepGraph {
                         type_only: false,
                         with: Some(Box::new(create_turbopack_part_id_assert(PartId::Internal(
                             dep,
+                        )))),
+                        phase: Default::default(),
+                    })));
+            }
+
+            // Depend on exports.
+            //
+            // We preserve the export if the content is preserved.
+            // It's for server actions, where we need to preserve the export if the content is used.
+            for &var in &required_vars {
+                let Some(&dep) = exporter.get(&var.0) else {
+                    continue;
+                };
+
+                if dep == ix as u32 {
+                    continue;
+                }
+
+                part_deps
+                    .entry(ix as u32)
+                    .or_default()
+                    .push(PartId::Export(var.0.as_str().into()));
+
+                chunk
+                    .body
+                    .push(ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
+                        span: DUMMY_SP,
+                        specifiers: vec![],
+                        src: Box::new(TURBOPACK_PART_IMPORT_SOURCE.into()),
+                        type_only: false,
+                        with: Some(Box::new(create_turbopack_part_id_assert(PartId::Export(
+                            var.0.as_str().into(),
                         )))),
                         phase: Default::default(),
                     })));
