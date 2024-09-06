@@ -18,13 +18,6 @@ export function createServerModuleMap({
     {},
     {
       get: (_, id: string) => {
-        console.log(
-          'createServerModuleMap, id',
-          serverActionsManifest[
-            process.env.NEXT_RUNTIME === 'edge' ? 'edge' : 'node'
-          ],
-          id
-        )
         return {
           id: serverActionsManifest[
             process.env.NEXT_RUNTIME === 'edge' ? 'edge' : 'node'
