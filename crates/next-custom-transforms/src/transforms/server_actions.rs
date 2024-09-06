@@ -17,6 +17,7 @@ use swc_core::{
     ecma::{
         ast::*,
         atoms::JsWord,
+        codegen::to_code,
         utils::{private_ident, quote_ident, ExprFactory},
         visit::{as_folder, noop_visit_mut_type, Fold, VisitMut, VisitMutWith},
     },
@@ -706,8 +707,15 @@ impl<C: Comments> VisitMut for ServerActions<C> {
     }
 
     fn visit_mut_module(&mut self, m: &mut Module) {
+        let input = to_code(&*m);
         self.start_pos = m.span.lo;
         m.visit_mut_children_with(self);
+
+        let output = to_code(&*m);
+
+        if input != output {
+            eprintln!("# After: \n{}", output);
+        }
     }
 
     fn visit_mut_stmt(&mut self, n: &mut Stmt) {
