@@ -474,6 +474,7 @@ impl DepGraph {
                         continue;
                     }
                 }
+
                 chunk.body.push(data[g].content.clone());
             }
 
@@ -545,24 +546,11 @@ impl DepGraph {
     /// performance.
     pub(super) fn finalize(
         &self,
-        data: &FxHashMap<ItemId, ItemData>,
+        _data: &FxHashMap<ItemId, ItemData>,
     ) -> InternedGraph<Vec<ItemId>> {
         let graph = self.g.idx_graph.clone().into_graph::<u32>();
 
-        let mut condensed = condensation(graph, false);
-
-        // Drop a group if all items in the group are pure
-        condensed.retain_nodes(|condensed, node| {
-            let is_all_pure = condensed[node]
-                .iter()
-                .map(|&ix| &self.g.graph_ix[ix as usize])
-                .all(|item| {
-                    let data = data.get(item).unwrap();
-                    data.pure
-                });
-
-            !is_all_pure
-        });
+        let condensed = condensation(graph, false);
 
         let mut new_graph = InternedGraph::default();
         let mut done = FxHashSet::default();
