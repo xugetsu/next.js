@@ -1,7 +1,7 @@
 #![feature(arbitrary_self_types)]
 
 use anyhow::{bail, Result};
-use turbo_tasks::{emit, CollectiblesSource, RcStr, State, ValueToString, Vc};
+use turbo_tasks::{emit, CollectiblesSource, RcStr, State, ValueToString, Vc, VcOperation};
 use turbo_tasks_testing::{register, run, Registration};
 
 static REGISTRATION: Registration = register!();
@@ -82,7 +82,7 @@ async fn compute(input: Vc<ChangingInput>, innerness: u32) -> Result<Vc<Output>>
     }
     let operation = inner_compute(input);
     let value = *operation.await?;
-    let collectibles = operation.peek_collectibles::<Box<dyn ValueToString>>();
+    let collectibles = VcOperation::new(operation).peek_collectibles::<Box<dyn ValueToString>>();
     if collectibles.len() != 1 {
         bail!("expected 1 collectible, found {}", collectibles.len());
     }

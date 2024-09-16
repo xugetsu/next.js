@@ -11,6 +11,7 @@ pub mod global_module_id_strategy;
 mod instrumentation;
 mod loadable_manifest;
 mod middleware;
+pub mod operation;
 mod pages;
 pub mod paths;
 pub mod project;

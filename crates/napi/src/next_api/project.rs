@@ -7,12 +7,14 @@ use napi::{
     JsFunction, Status,
 };
 use next_api::{
-    entrypoints::Entrypoints,
-    project::{
-        DefineEnv, DraftModeOptions, Instrumentation, Middleware, PartialProjectOptions, Project,
-        ProjectContainer, ProjectOptions,
+    operation::{
+        EntrypointsOperation, InstrumentationOperation, MiddlewareOperation, RouteOperation,
     },
-    route::{Endpoint, Route},
+    project::{
+        DefineEnv, DraftModeOptions, PartialProjectOptions, Project, ProjectContainer,
+        ProjectOptions,
+    },
+    route::Endpoint,
 };
 use next_core::tracing_presets::{
     TRACING_NEXT_OVERVIEW_TARGETS, TRACING_NEXT_TARGETS, TRACING_NEXT_TURBOPACK_TARGETS,
@@ -22,7 +24,9 @@ use rand::Rng;
 use tokio::{io::AsyncWriteExt, time::Instant};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
-use turbo_tasks::{Completion, RcStr, ReadRef, TransientInstance, TurboTasks, UpdateInfo, Vc};
+use turbo_tasks::{
+    Completion, RcStr, ReadRef, TransientInstance, TurboTasks, UpdateInfo, Vc, VcOperation,
+};
 use turbo_tasks_fs::{DiskFileSystem, FileContent, FileSystem, FileSystemPath};
 use turbo_tasks_memory::MemoryBackend;
 use turbopack_core::{
@@ -479,17 +483,17 @@ struct NapiRoute {
 impl NapiRoute {
     fn from_route(
         pathname: String,
-        value: Route,
+        value: RouteOperation,
         turbo_tasks: &Arc<TurboTasks<MemoryBackend>>,
     ) -> Self {
-        let convert_endpoint = |endpoint: Vc<Box<dyn Endpoint>>| {
+        let convert_endpoint = |endpoint: VcOperation<Box<dyn Endpoint>>| {
             Some(External::new(ExternalEndpoint(VcArc::new(
                 turbo_tasks.clone(),
                 endpoint,
             ))))
         };
         match value {
-            Route::Page {
+            RouteOperation::Page {
                 html_endpoint,
                 data_endpoint,
             } => NapiRoute {
@@ -499,13 +503,13 @@ impl NapiRoute {
                 data_endpoint: convert_endpoint(data_endpoint),
                 ..Default::default()
             },
-            Route::PageApi { endpoint } => NapiRoute {
+            RouteOperation::PageApi { endpoint } => NapiRoute {
                 pathname,
                 r#type: "page-api",
                 endpoint: convert_endpoint(endpoint),
                 ..Default::default()
             },
-            Route::AppPage(pages) => NapiRoute {
+            RouteOperation::AppPage(pages) => NapiRoute {
                 pathname,
                 r#type: "app-page",
                 pages: Some(
@@ -520,7 +524,7 @@ impl NapiRoute {
                 ),
                 ..Default::default()
             },
-            Route::AppRoute {
+            RouteOperation::AppRoute {
                 original_name,
                 endpoint,
             } => NapiRoute {
@@ -530,7 +534,7 @@ impl NapiRoute {
                 endpoint: convert_endpoint(endpoint),
                 ..Default::default()
             },
-            Route::Conflict => NapiRoute {
+            RouteOperation::Conflict => NapiRoute {
                 pathname,
                 r#type: "conflict",
                 ..Default::default()
@@ -546,7 +550,7 @@ struct NapiMiddleware {
 
 impl NapiMiddleware {
     fn from_middleware(
-        value: &Middleware,
+        value: &MiddlewareOperation,
         turbo_tasks: &Arc<TurboTasks<MemoryBackend>>,
     ) -> Result<Self> {
         Ok(NapiMiddleware {
@@ -566,7 +570,7 @@ struct NapiInstrumentation {
 
 impl NapiInstrumentation {
     fn from_instrumentation(
-        value: &Instrumentation,
+        value: &InstrumentationOperation,
         turbo_tasks: &Arc<TurboTasks<MemoryBackend>>,
     ) -> Result<Self> {
         Ok(NapiInstrumentation {
@@ -594,7 +598,7 @@ struct NapiEntrypoints {
 
 #[turbo_tasks::value(serialization = "none")]
 struct EntrypointsWithIssues {
-    entrypoints: ReadRef<Entrypoints>,
+    entrypoints: ReadRef<EntrypointsOperation>,
     issues: Arc<Vec<ReadRef<PlainIssue>>>,
     diagnostics: Arc<Vec<ReadRef<PlainDiagnostic>>>,
 }
@@ -603,8 +607,9 @@ struct EntrypointsWithIssues {
 async fn get_entrypoints_with_issues(
     container: Vc<ProjectContainer>,
 ) -> Result<Vc<EntrypointsWithIssues>> {
-    let entrypoints_operation = container.entrypoints();
-    let entrypoints = entrypoints_operation.strongly_consistent().await?;
+    let entrypoints = container.entrypoints_operation();
+    let entrypoints_operation = VcOperation::new(entrypoints);
+    let entrypoints = entrypoints.strongly_consistent().await?;
     let issues = get_issues(entrypoints_operation).await?;
     let diagnostics = get_diagnostics(entrypoints_operation).await?;
     Ok(EntrypointsWithIssues {
@@ -700,8 +705,9 @@ async fn hmr_update(
     identifier: RcStr,
     state: Vc<VersionState>,
 ) -> Result<Vc<HmrUpdateWithIssues>> {
-    let update_operation = project.hmr_update(identifier, state);
-    let update = update_operation.strongly_consistent().await?;
+    let update = project.hmr_update(identifier, state);
+    let update_operation = VcOperation::new(update);
+    let update = update.strongly_consistent().await?;
     let issues = get_issues(update_operation).await?;
     let diagnostics = get_diagnostics(update_operation).await?;
     Ok(HmrUpdateWithIssues {
@@ -812,8 +818,9 @@ struct HmrIdentifiersWithIssues {
 async fn get_hmr_identifiers_with_issues(
     container: Vc<ProjectContainer>,
 ) -> Result<Vc<HmrIdentifiersWithIssues>> {
-    let hmr_identifiers_operation = container.hmr_identifiers();
-    let hmr_identifiers = hmr_identifiers_operation.strongly_consistent().await?;
+    let hmr_identifiers = container.hmr_identifiers();
+    let hmr_identifiers_operation = VcOperation::new(hmr_identifiers);
+    let hmr_identifiers = hmr_identifiers.strongly_consistent().await?;
     let issues = get_issues(hmr_identifiers_operation).await?;
     let diagnostics = get_diagnostics(hmr_identifiers_operation).await?;
     Ok(HmrIdentifiersWithIssues {

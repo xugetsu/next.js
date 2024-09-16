@@ -1,7 +1,9 @@
 use anyhow::Result;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use turbo_tasks::{debug::ValueDebugFormat, trace::TraceRawVcs, Completion, RcStr, Vc};
+use turbo_tasks::{
+    debug::ValueDebugFormat, trace::TraceRawVcs, Completion, RcStr, Vc, VcOperation,
+};
 use turbopack_core::module::Modules;
 
 use crate::paths::ServerPath;
@@ -73,7 +75,10 @@ impl Route {
 
 #[turbo_tasks::value_trait]
 pub trait Endpoint {
-    fn write_to_disk(self: Vc<Self>) -> Vc<WrittenEndpoint>;
+    fn write_to_disk(
+        self: Vc<Self>,
+        self_op: VcOperation<Box<dyn Endpoint>>,
+    ) -> Vc<WrittenEndpoint>;
     fn server_changed(self: Vc<Self>) -> Vc<Completion>;
     fn client_changed(self: Vc<Self>) -> Vc<Completion>;
     fn root_modules(self: Vc<Self>) -> Vc<Modules>;

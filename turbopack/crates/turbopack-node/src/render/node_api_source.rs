@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use indexmap::IndexSet;
 use serde_json::Value as JsonValue;
-use turbo_tasks::{RcStr, Value, Vc};
+use turbo_tasks::{RcStr, Value, Vc, VcOperation};
 use turbo_tasks_env::ProcessEnv;
 use turbo_tasks_fs::FileSystemPath;
 use turbopack_core::introspect::{
@@ -128,7 +128,7 @@ impl GetContentSourceContent for NodeApiContentSource {
             return Err(anyhow!("Missing request data"));
         };
         let entry = self.entry.entry(data.clone()).await?;
-        Ok(ContentSourceContent::HttpProxy(render_proxy(
+        let render_proxy = render_proxy(
             self.cwd,
             self.env,
             self.server_root.join(path.clone()),
@@ -151,8 +151,9 @@ impl GetContentSourceContent for NodeApiContentSource {
             .cell(),
             *body,
             self.debug,
-        ))
-        .cell())
+        );
+        // TODO entry should be included in the operation too
+        Ok(ContentSourceContent::HttpProxy(VcOperation::new(render_proxy)).cell())
     }
 }
 

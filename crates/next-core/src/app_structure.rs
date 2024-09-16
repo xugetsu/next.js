@@ -1101,12 +1101,14 @@ async fn directory_tree_to_entrypoints_internal_untraced(
             app_path,
         )
         .await?;
+        let loader_tree =
+            loader_tree.context("loader tree should be created for a page/default")?;
 
         add_app_page(
             app_dir,
             &mut result,
             app_page.complete(PageType::Page)?,
-            loader_tree.context("loader tree should be created for a page/default")?,
+            loader_tree,
         );
     }
 

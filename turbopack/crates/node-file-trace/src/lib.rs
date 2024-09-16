@@ -23,7 +23,7 @@ use serde::Serialize;
 use tokio::sync::mpsc::channel;
 use turbo_tasks::{
     backend::Backend, util::FormatDuration, RcStr, ReadConsistency, TaskId, TransientInstance,
-    TransientValue, TurboTasks, UpdateInfo, Value, Vc,
+    TransientValue, TurboTasks, UpdateInfo, Value, Vc, VcOperation,
 };
 use turbo_tasks_fs::{
     glob::Glob, DirectoryEntry, DiskFileSystem, FileSystem, FileSystemPath, ReadGlobResult,
@@ -483,10 +483,11 @@ async fn run<B: Backend + 'static, F: Future<Output = ()>>(
                 module_options,
                 resolve_options,
             );
+            let output_op = VcOperation::new(output);
             let _ = output.resolve_strongly_consistent().await?;
 
-            let source = TransientValue::new(Vc::into_raw(output));
-            let issues = output.peek_issues_with_path().await?;
+            let source = TransientValue::new(VcOperation::into_raw(output_op));
+            let issues = output_op.peek_issues_with_path().await?;
 
             let console_ui = ConsoleUi::new(log_options);
             Vc::upcast::<Box<dyn IssueReporter>>(console_ui)
@@ -553,9 +554,10 @@ async fn main_operation(
             )
             .await?;
             for module in modules.iter() {
-                let set = all_modules_and_affecting_sources(*module)
+                let set = VcOperation::new(all_modules_and_affecting_sources(*module))
                     .issue_file_path(module.ident().path(), "gathering list of assets")
-                    .await?;
+                    .await?
+                    .connect();
                 for asset in set.await?.iter() {
                     let path = asset.ident().path().await?;
                     result.insert(RcStr::from(&*path.path));

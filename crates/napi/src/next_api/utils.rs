@@ -7,7 +7,7 @@ use napi::{
     JsFunction, JsObject, JsUnknown, NapiRaw, NapiValue, Status,
 };
 use serde::Serialize;
-use turbo_tasks::{ReadRef, TaskId, TryJoinIterExt, TurboTasks, Vc};
+use turbo_tasks::{ReadRef, TaskId, TryJoinIterExt, TurboTasks, Vc, VcOperation};
 use turbo_tasks_fs::FileContent;
 use turbo_tasks_memory::MemoryBackend;
 use turbopack_core::{
@@ -20,17 +20,24 @@ use turbopack_core::{
 use crate::util::log_internal_error_and_inform;
 
 /// A helper type to hold both a Vc operation and the TurboTasks root process.
-/// Without this, we'd need to pass both individually all over the place
+/// Without this, we'd need to pass both individually all over the place.
+/// Make sure to Vc::connect the `vc` when using it.
 #[derive(Clone)]
-pub struct VcArc<T> {
+pub struct VcArc<T>
+where
+    T: Send,
+{
     turbo_tasks: Arc<TurboTasks<MemoryBackend>>,
-    /// The Vc. Must be resolved, otherwise you are referencing an inactive
-    /// operation.
-    vc: T,
+    // TODO: this should be a VcOperation
+    /// The Vc.
+    vc: VcOperation<T>,
 }
 
-impl<T> VcArc<T> {
-    pub fn new(turbo_tasks: Arc<TurboTasks<MemoryBackend>>, vc: T) -> Self {
+impl<T> VcArc<T>
+where
+    T: Send,
+{
+    pub fn new(turbo_tasks: Arc<TurboTasks<MemoryBackend>>, vc: VcOperation<T>) -> Self {
         Self { turbo_tasks, vc }
     }
 
@@ -39,8 +46,11 @@ impl<T> VcArc<T> {
     }
 }
 
-impl<T> Deref for VcArc<T> {
-    type Target = T;
+impl<T> Deref for VcArc<T>
+where
+    T: Send,
+{
+    type Target = VcOperation<T>;
 
     fn deref(&self) -> &Self::Target {
         &self.vc
@@ -78,7 +88,7 @@ pub fn root_task_dispose(
     Ok(())
 }
 
-pub async fn get_issues<T: Send>(source: Vc<T>) -> Result<Arc<Vec<ReadRef<PlainIssue>>>> {
+pub async fn get_issues<T: Send>(source: VcOperation<T>) -> Result<Arc<Vec<ReadRef<PlainIssue>>>> {
     let issues = source.peek_issues_with_path().await?;
     Ok(Arc::new(issues.get_plain_issues().await?))
 }
@@ -87,7 +97,9 @@ pub async fn get_issues<T: Send>(source: Vc<T>) -> Result<Arc<Vec<ReadRef<PlainI
 /// by the given source and returns it as a
 /// [turbopack_core::diagnostics::PlainDiagnostic]. It does
 /// not consume any Diagnostics held by the source.
-pub async fn get_diagnostics<T: Send>(source: Vc<T>) -> Result<Arc<Vec<ReadRef<PlainDiagnostic>>>> {
+pub async fn get_diagnostics<T: Send>(
+    source: VcOperation<T>,
+) -> Result<Arc<Vec<ReadRef<PlainDiagnostic>>>> {
     let captured_diags = source.peek_diagnostics().await?;
     let mut diags = captured_diags
         .diagnostics

@@ -19,6 +19,7 @@ use futures::{stream::Stream as StreamTrait, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use turbo_tasks::{
     trace::TraceRawVcs, util::SharedError, Completion, RcStr, Upcast, Value, ValueDefault, Vc,
+    VcOperation,
 };
 use turbo_tasks_bytes::{Bytes, Stream, StreamRead};
 use turbo_tasks_fs::FileSystemPath;
@@ -89,7 +90,7 @@ pub struct StaticContent {
 pub enum ContentSourceContent {
     NotFound,
     Static(Vc<StaticContent>),
-    HttpProxy(Vc<ProxyResult>),
+    HttpProxy(VcOperation<ProxyResult>),
     Rewrite(Vc<Rewrite>),
     /// Continue with the next route
     Next,
