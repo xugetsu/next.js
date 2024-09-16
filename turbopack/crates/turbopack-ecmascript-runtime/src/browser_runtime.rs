@@ -2,7 +2,7 @@ use std::io::Write;
 
 use anyhow::Result;
 use indoc::writedoc;
-use turbo_tasks::{RcStr, Vc};
+use turbo_tasks::{RcStr, Value, Vc};
 use turbopack_core::{
     code_builder::{Code, CodeBuilder},
     context::AssetContext,
@@ -10,13 +10,14 @@ use turbopack_core::{
 };
 use turbopack_ecmascript::utils::StringifyJs;
 
-use crate::{asset_context::get_runtime_asset_context, embed_js::embed_static_code};
+use crate::{asset_context::get_runtime_asset_context, embed_js::embed_static_code, RuntimeType};
 
-/// Returns the code for the development ECMAScript runtime.
+/// Returns the code for the ECMAScript runtime.
 #[turbo_tasks::function]
 pub async fn get_browser_runtime_code(
     environment: Vc<Environment>,
     chunk_base_path: Vc<Option<RcStr>>,
+    runtime_type: Value<RuntimeType>,
     output_root: Vc<RcStr>,
 ) -> Result<Vc<Code>> {
     let asset_context = get_runtime_asset_context(environment);
@@ -25,7 +26,11 @@ pub async fn get_browser_runtime_code(
         embed_static_code(asset_context, "shared/runtime-utils.ts".into());
     let runtime_base_code = embed_static_code(
         asset_context,
-        "browser/dev/runtime/base/runtime-base.ts".into(),
+        if *runtime_type == RuntimeType::Development {
+            "browser/dev/runtime/base/runtime-base.ts".into()
+        } else {
+            "browser/runtime/base/runtime-base.ts".into()
+        },
     );
 
     let chunk_loading = &*asset_context
@@ -34,15 +39,34 @@ pub async fn get_browser_runtime_code(
         .chunk_loading()
         .await?;
 
+    dbg!(runtime_type);
+
     let runtime_backend_code = embed_static_code(
         asset_context,
-        match chunk_loading {
-            ChunkLoading::Edge => "browser/dev/runtime/edge/runtime-backend-edge.ts".into(),
+        match (chunk_loading, *runtime_type) {
+            (ChunkLoading::Edge, RuntimeType::Development) => {
+                "browser/dev/runtime/edge/runtime-backend-edge.ts".into()
+            }
+            (ChunkLoading::Edge, RuntimeType::Production) => {
+                // TODO
+                "browser/runtime/edge/runtime-backend-edge.ts".into()
+            }
             // This case should never be hit.
-            ChunkLoading::NodeJs => {
+            (ChunkLoading::NodeJs, _) => {
                 panic!("Node.js runtime is not supported in the browser runtime!")
             }
-            ChunkLoading::Dom => "browser/dev/runtime/dom/runtime-backend-dom.ts".into(),
+            (ChunkLoading::Dom, RuntimeType::Development) => {
+                "browser/dev/runtime/dom/runtime-backend-dom.ts".into()
+            }
+            (ChunkLoading::Dom, RuntimeType::Production) => {
+                // TODO
+                "browser/runtime/dom/runtime-backend-dom.ts".into()
+            }
+
+            #[cfg(feature = "test")]
+            (_, RuntimeType::Dummy) => {
+                panic!("This configuration is not supported in the browser runtime")
+            }
         },
     );
 

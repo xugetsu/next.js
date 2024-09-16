@@ -243,7 +243,9 @@ function esmImport(
 // Add a simple runtime require so that environments without one can still pass
 // `typeof require` CommonJS checks so that exports are correctly registered.
 const runtimeRequire =
+  // @ts-ignore
   typeof require === "function"
+    // @ts-ignore
     ? require
     : function require() {
         throw new Error("Unexpected use of runtime require");

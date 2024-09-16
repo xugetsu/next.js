@@ -177,7 +177,7 @@ function loadWebAssemblyModule(chunkPath: ChunkPath) {
   return compileWebAssemblyFromPath(resolved);
 }
 
-function getWorkerBlobURL(_chunks: ChunkPath[]) {
+function getWorkerBlobURL(_chunks: ChunkPath[]): string {
   throw new Error("Worker blobs are not implemented yet for Node.js");
 }
 
