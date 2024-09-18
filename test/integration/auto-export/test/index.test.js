@@ -99,6 +99,16 @@ describe('Auto Export', () => {
         expect.arrayContaining([
           {
             message: expect.stringContaining(
+              'See more info here: https://nextjs.org/docs/messages/react-hydration-error'
+            ),
+            source: 'error',
+          },
+        ])
+      )
+      expect(logs).toEqual(
+        expect.arrayContaining([
+          {
+            message: expect.stringContaining(
               'https://react.dev/link/hydration-mismatch'
             ),
             source: 'error',
