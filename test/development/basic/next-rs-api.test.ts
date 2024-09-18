@@ -15,6 +15,8 @@ import {
 import loadConfig from 'next/dist/server/config'
 import path from 'path'
 
+const isReact18 = parseInt(process.env.NEXT_TEST_REACT_VERSION) === 18
+
 function normalizePath(path: string) {
   return path
     .replace(/\[project\].+\/node_modules\//g, '[project]/.../node_modules/')
@@ -41,6 +43,21 @@ function styledStringToMarkdown(styled: StyledString): string {
   }
 }
 
+function isReactDOMServerEdgeConditionalBundlingIssue(issue: {
+  description?: Issue['description']
+  filePath: string
+}) {
+  return (
+    isReact18 &&
+    issue.filePath ===
+      '[project]/.../node_modules/next/dist/esm/server/ReactDOMServerPages.js' &&
+    issue.description?.type === 'text' &&
+    issue.description?.value.includes(
+      'Import map: aliased to module "react-dom" with subpath "/server.edge" inside of [project]/'
+    )
+  )
+}
+
 function normalizeIssues(issues: Issue[]) {
   return issues
     .map((issue) => ({
@@ -53,6 +70,11 @@ function normalizeIssues(issues: Issue[]) {
         source: normalizePath(issue.source.source.ident),
       },
     }))
+    .filter((issue) => {
+      // The conditional bundling is wrapped in a try-catch.
+      // It doesn't surface to the user, so it's safe to ignore here.
+      return !isReactDOMServerEdgeConditionalBundlingIssue(issue)
+    })
     .sort((a, b) => {
       const a_ = JSON.stringify(a)
       const b_ = JSON.stringify(b)
@@ -504,7 +526,7 @@ describe('next.rs api', () => {
             expect(result.done).toBe(false)
             expect(result.value).toHaveProperty('resource', expect.toBeObject())
             expect(result.value).toHaveProperty('type', 'issues')
-            expect(result.value).toHaveProperty('issues', expect.toBeEmpty())
+            expect(normalizeIssues(result.value.issues)).toEqual([])
             expect(result.value).toHaveProperty(
               'diagnostics',
               expect.toBeEmpty()
