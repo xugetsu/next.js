@@ -80,7 +80,7 @@ fn wrap_route(route: &Route, entrypoints: VcOperation<Entrypoints>) -> RouteOper
             original_name: original_name.clone(),
             endpoint: wrap(*endpoint, entrypoints),
         },
-        Route::Conflict => todo!(),
+        Route::Conflict => RouteOperation::Conflict,
     }
 }
 
