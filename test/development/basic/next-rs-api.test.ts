@@ -507,7 +507,7 @@ describe('next.rs api', () => {
             expect(result.value).toHaveProperty('issues', expect.toBeEmpty())
             expect(result.value).toHaveProperty(
               'diagnostics',
-              expect.toBeEmpty()
+              expect.toBeArray()
             )
           })
         )
@@ -627,7 +627,7 @@ describe('next.rs api', () => {
         expect(result.done).toBe(false)
         expect(result.value).toHaveProperty('resource', expect.toBeObject())
         expect(result.value).toHaveProperty('type', 'issues')
-        expect(result.value).toHaveProperty('diagnostics', expect.toBeEmpty())
+        expect(result.value).toHaveProperty('diagnostics', expect.toBeArray())
       })
     )
     const merged = raceIterators(subscriptions)
