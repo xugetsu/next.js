@@ -6,7 +6,7 @@ import { NextFetchEvent } from './spec-extension/fetch-event'
 import { NextRequest } from './spec-extension/request'
 import { NextResponse } from './spec-extension/response'
 import { relativizeURL } from '../../shared/lib/router/utils/relativize-url'
-import { waitUntilSymbol } from './spec-extension/fetch-event'
+import { waitUntilPromisesSymbol } from './spec-extension/fetch-event'
 import { NextURL } from './next-url'
 import { stripInternalSearchParams } from '../internal-utils'
 import { normalizeRscURL } from '../../shared/lib/router/utils/app-paths'
@@ -196,7 +196,15 @@ export async function adapter(
     })
   }
 
-  const event = new NextFetchEvent({ request, page: params.page })
+  const event = new NextFetchEvent({
+    request,
+    page: params.page,
+    // if we're in an edge runtime sandbox, we should use the waitUntil
+    // that we receive from the enclosing NextServer
+    context: params.request.waitUntil
+      ? { waitUntil: params.request.waitUntil }
+      : undefined,
+  })
   let response
   let cookiesFromResponse
 
@@ -239,16 +247,20 @@ export async function adapter(
               {
                 req: request,
                 res: undefined,
+                context: {
+                  waitUntil,
+                  onClose: closeController
+                    ? closeController.onClose.bind(closeController)
+                    : undefined,
+                },
                 url: request.nextUrl,
                 renderOpts: {
                   onUpdateCookies: (cookies) => {
                     cookiesFromResponse = cookies
                   },
                   previewProps,
-                  waitUntil,
-                  onClose: closeController
-                    ? closeController.onClose.bind(closeController)
-                    : undefined,
+                  waitUntil: undefined, // TODO(after): remove these from renderOpts
+                  onClose: undefined, // TODO(after): remove these from renderOpts
                   experimental: {
                     after: isAfterEnabled,
                   },
@@ -390,7 +402,7 @@ export async function adapter(
 
   return {
     response: finalResponse,
-    waitUntil: Promise.all(event[waitUntilSymbol]),
+    waitUntil: Promise.all(event[waitUntilPromisesSymbol]),
     fetchMetrics: request.fetchMetrics,
   }
 }

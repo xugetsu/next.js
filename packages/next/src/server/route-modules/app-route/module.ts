@@ -68,6 +68,7 @@ import { ReflectAdapter } from '../../web/spec-extension/adapters/reflect'
 import type { RenderOptsPartial } from '../../app-render/types'
 import { CacheSignal } from '../../app-render/cache-signal'
 import { scheduleImmediate } from '../../../lib/scheduler'
+import type { RequestLifecycleOpts } from '../../base-server'
 
 /**
  * The AppRouteModule is the type of the module exported by the bundled App
@@ -83,6 +84,7 @@ export interface AppRouteRouteHandlerContext extends RouteModuleHandleContext {
   renderOpts: StaticGenerationContext['renderOpts'] &
     Pick<RenderOptsPartial, 'onInstrumentationRequestError'>
   prerenderManifest: DeepReadonly<PrerenderManifest>
+  context: RequestLifecycleOpts
 }
 
 /**
@@ -277,11 +279,12 @@ export class AppRouteRouteModule extends RouteModule<
     const requestContext: RequestContext = {
       req: rawRequest,
       res: undefined,
+      context: context.context,
       url: rawRequest.nextUrl,
       renderOpts: {
         previewProps: context.prerenderManifest.preview,
-        waitUntil: context.renderOpts.waitUntil,
-        onClose: context.renderOpts.onClose,
+        waitUntil: undefined, // TODO(after): remove these from renderOpts
+        onClose: undefined, // TODO(after): remove these from renderOpts
         experimental: context.renderOpts.experimental,
       },
     }

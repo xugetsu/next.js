@@ -107,12 +107,14 @@ export class EdgeRouteModuleWrapper {
         preview: previewProps,
         notFoundRoutes: [],
       },
-      renderOpts: {
-        supportsDynamicResponse: true,
+      context: {
         waitUntil,
         onClose: closeController
           ? closeController.onClose.bind(closeController)
           : undefined,
+      },
+      renderOpts: {
+        supportsDynamicResponse: true,
         experimental: {
           after: isAfterEnabled,
           dynamicIO: false,

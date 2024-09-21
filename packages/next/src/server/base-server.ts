@@ -1758,7 +1758,7 @@ export default abstract class Server<
     )
   }
 
-  private getWaitUntil(): WaitUntil | undefined {
+  protected getWaitUntil(): WaitUntil | undefined {
     const builtinRequestContext = getBuiltinRequestContext()
     if (builtinRequestContext) {
       // the platform provided a request context.
@@ -1773,8 +1773,10 @@ export default abstract class Server<
       // because we have no way of keeping the invocation alive.
       // return nothing, and `unstable_after` will error if used.
       //
-      // FIXME: edge pages always use minimalMode (see `next-edge-ssr-loader/render.ts`)
-      // so in dev we'll cause `unstable_after` to needlessly throw
+      // NOTE: for edge functions, `NextWebServer` always runs in minimal mode.
+      // in next dev/start, it'll be in an edge runtime sandbox.
+      // but in that case, `waitUntil` will be passed in via `NodejsRequestData`
+      // and then directly into `WebNextResponse`, so we'll never hit this codepath
       return undefined
     }
 
@@ -2435,8 +2437,8 @@ export default abstract class Server<
         isDraftMode: isPreviewMode,
         isServerAction,
         postponed,
-        waitUntil: this.getWaitUntil(),
-        onClose: res.onClose.bind(res),
+        waitUntil: undefined, // TODO(after): remove these from renderOpts
+        onClose: undefined, // TODO(after): remove these from renderOpts
         // only available in dev
         setAppIsrStatus: (this as any).setAppIsrStatus,
       }
@@ -2472,6 +2474,10 @@ export default abstract class Server<
           const context: AppRouteRouteHandlerContext = {
             params: opts.params,
             prerenderManifest,
+            context: {
+              waitUntil: req.context?.waitUntil,
+              onClose: res.onClose.bind(res),
+            },
             renderOpts: {
               experimental: {
                 after: renderOpts.experimental.after,
@@ -2480,8 +2486,8 @@ export default abstract class Server<
               supportsDynamicResponse,
               incrementalCache,
               isRevalidate: isSSG,
-              waitUntil: this.getWaitUntil(),
-              onClose: res.onClose.bind(res),
+              waitUntil: undefined, // TODO(after): remove these from renderOpts
+              onClose: undefined, // TODO(after): remove these from renderOpts
               onInstrumentationRequestError:
                 this.renderOpts.onInstrumentationRequestError,
             },

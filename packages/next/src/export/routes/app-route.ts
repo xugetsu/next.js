@@ -50,7 +50,7 @@ export async function exportAppRoute(
 
   // Adapt the request and response to the Next.js request and response.
   const request = NextRequestAdapter.fromNodeNextRequest(
-    new NodeNextRequest(req),
+    new NodeNextRequest(req, undefined),
     signalFromNodeResponse(res)
   )
 
@@ -69,13 +69,17 @@ export async function exportAppRoute(
       },
       notFoundRoutes: [],
     },
+    context: {
+      waitUntil: undefined,
+      onClose: undefined,
+    },
     renderOpts: {
       experimental,
       nextExport: true,
       supportsDynamicResponse: false,
       incrementalCache,
-      waitUntil: undefined,
-      onClose: undefined,
+      waitUntil: undefined, // TODO(after): remove these from renderOpts
+      onClose: undefined, // TODO(after): remove these from renderOpts
     },
   }
 

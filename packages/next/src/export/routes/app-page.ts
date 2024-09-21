@@ -59,7 +59,7 @@ export async function exportAppPage(
 
   try {
     const result = await lazyRenderAppPage(
-      new NodeNextRequest(req),
+      new NodeNextRequest(req, undefined),
       new NodeNextResponse(res),
       pathname,
       query,
