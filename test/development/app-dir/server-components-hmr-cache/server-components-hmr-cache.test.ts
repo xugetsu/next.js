@@ -6,8 +6,16 @@ describe('server-components-hmr-cache', () => {
   const loggedAfterValueRegexp = /After: (\d\.\d+)/
   let cliOutputLength: number
 
-  const getLoggedAfterValue = () =>
-    next.cliOutput.slice(cliOutputLength).match(loggedAfterValueRegexp)?.[1]
+  const getLoggedAfterValue = () => {
+    const match = next.cliOutput
+      .slice(cliOutputLength)
+      .match(loggedAfterValueRegexp)
+
+    if (!match) {
+      throw new Error('No logs from after() found')
+    }
+    return match[1]
+  }
 
   describe.each(['edge', 'node'])('%s runtime', (runtime) => {
     afterEach(async () => {
