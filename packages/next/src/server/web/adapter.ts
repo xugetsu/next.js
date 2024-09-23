@@ -12,16 +12,14 @@ import { stripInternalSearchParams } from '../internal-utils'
 import { normalizeRscURL } from '../../shared/lib/router/utils/app-paths'
 import { FLIGHT_HEADERS } from '../../client/components/app-router-headers'
 import { ensureInstrumentationRegistered } from './globals'
-import {
-  withRequestStore,
-  type WrapperRenderOpts,
-} from '../async-storage/with-request-store'
+import { withRequestStore } from '../async-storage/with-request-store'
 import { requestAsyncStorage } from '../../client/components/request-async-storage.external'
 import { getTracer } from '../lib/trace/tracer'
 import type { TextMapGetter } from 'next/dist/compiled/@opentelemetry/api'
 import { MiddlewareSpan } from '../lib/trace/constants'
 import { CloseController } from './web-on-close'
 import { getEdgePreviewProps } from './get-edge-preview-props'
+import type { NextRequestContext } from '../base-http'
 
 export class NextRequestHint extends NextRequest {
   sourcePage: string
@@ -221,7 +219,7 @@ export async function adapter(
         params.request.nextConfig?.experimental?.after ??
         !!process.env.__NEXT_AFTER
 
-      let waitUntil: WrapperRenderOpts['waitUntil'] = undefined
+      let waitUntil: NextRequestContext['waitUntil'] | undefined = undefined
       let closeController: CloseController | undefined = undefined
 
       if (isAfterEnabled) {
@@ -259,8 +257,6 @@ export async function adapter(
                     cookiesFromResponse = cookies
                   },
                   previewProps,
-                  waitUntil: undefined, // TODO(after): remove these from renderOpts
-                  onClose: undefined, // TODO(after): remove these from renderOpts
                   experimental: {
                     after: isAfterEnabled,
                   },

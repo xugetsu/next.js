@@ -78,8 +78,6 @@ export async function exportAppRoute(
       nextExport: true,
       supportsDynamicResponse: false,
       incrementalCache,
-      waitUntil: undefined, // TODO(after): remove these from renderOpts
-      onClose: undefined, // TODO(after): remove these from renderOpts
     },
   }
 

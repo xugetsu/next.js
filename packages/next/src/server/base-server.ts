@@ -257,9 +257,7 @@ export interface Options {
 
 export type RenderOpts = PagesRenderOptsPartial & AppRenderOptsPartial
 
-export type LoadedRenderOpts = RenderOpts &
-  LoadComponentsReturnType &
-  RequestLifecycleOpts
+export type LoadedRenderOpts = RenderOpts & LoadComponentsReturnType
 
 export type RequestLifecycleOpts = {
   waitUntil: ((promise: Promise<any>) => void) | undefined
@@ -2437,8 +2435,6 @@ export default abstract class Server<
         isDraftMode: isPreviewMode,
         isServerAction,
         postponed,
-        waitUntil: undefined, // TODO(after): remove these from renderOpts
-        onClose: undefined, // TODO(after): remove these from renderOpts
         // only available in dev
         setAppIsrStatus: (this as any).setAppIsrStatus,
       }
@@ -2486,8 +2482,6 @@ export default abstract class Server<
               supportsDynamicResponse,
               incrementalCache,
               isRevalidate: isSSG,
-              waitUntil: undefined, // TODO(after): remove these from renderOpts
-              onClose: undefined, // TODO(after): remove these from renderOpts
               onInstrumentationRequestError:
                 this.renderOpts.onInstrumentationRequestError,
             },

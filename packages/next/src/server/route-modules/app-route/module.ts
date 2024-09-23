@@ -283,8 +283,6 @@ export class AppRouteRouteModule extends RouteModule<
       url: rawRequest.nextUrl,
       renderOpts: {
         previewProps: context.prerenderManifest.preview,
-        waitUntil: undefined, // TODO(after): remove these from renderOpts
-        onClose: undefined, // TODO(after): remove these from renderOpts
         experimental: context.renderOpts.experimental,
       },
     }

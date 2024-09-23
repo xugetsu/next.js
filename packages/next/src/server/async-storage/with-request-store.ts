@@ -41,19 +41,15 @@ function getMutableCookies(
   return MutableRequestCookiesAdapter.wrap(cookies, onUpdateCookies)
 }
 
-export type WrapperRenderOpts = RequestLifecycleOpts &
-  Partial<
-    Pick<
-      RenderOpts,
-      | 'ComponentMod'
-      | 'onUpdateCookies'
-      | 'assetPrefix'
-      | 'reactLoadableManifest'
-    >
-  > & {
-    experimental: Pick<RenderOpts['experimental'], 'after'>
-    previewProps?: __ApiPreviewProps
-  }
+export type WrapperRenderOpts = Partial<
+  Pick<
+    RenderOpts,
+    'ComponentMod' | 'onUpdateCookies' | 'assetPrefix' | 'reactLoadableManifest'
+  >
+> & {
+  experimental: Pick<RenderOpts['experimental'], 'after'>
+  previewProps?: __ApiPreviewProps
+}
 
 export type RequestContext = RequestResponsePair & {
   /**
@@ -215,8 +211,6 @@ function createAfterContext(
   if (!isAfterEnabled(args.renderOpts)) {
     return undefined
   }
-
-  // TODO: remove RequestLifecycleOpts
 
   if (args.context) {
     return new AfterContext({
