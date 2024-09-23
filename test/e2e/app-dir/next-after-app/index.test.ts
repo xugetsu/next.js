@@ -1,5 +1,4 @@
 /* eslint-env jest */
-/* eslint-disable jest/no-standalone-expect */
 import { nextTestSetup } from 'e2e-utils'
 import { retry } from 'next-test-utils'
 import { createProxyServer } from 'next/experimental/testmode/proxy'
@@ -17,13 +16,6 @@ describe.each(runtimes)('unstable_after() in %s runtime', (runtimeValue) => {
   })
 
   if (skipped) return
-
-  // FIXME(lubieowoce)
-  // we currently have some bugs around waitUntil in `runtime = edge`,
-  // so some tests will fail due to this error:
-  //   "unstable_after()` will not work correctly, because `waitUntil` is not available in the current environment."
-  const itMaybe = runtimeValue === 'edge' ? it.failing : it
-
   const pathPrefix = '/' + runtimeValue
 
   let currentCliOutputIndex = 0
@@ -39,7 +31,7 @@ describe.each(runtimes)('unstable_after() in %s runtime', (runtimeValue) => {
     return Log.readCliLogs(next.cliOutput.slice(currentCliOutputIndex))
   }
 
-  itMaybe('runs in dynamic pages', async () => {
+  it('runs in dynamic pages', async () => {
     const response = await next.fetch(pathPrefix + '/123/dynamic')
     expect(response.status).toBe(200)
     await retry(() => {
@@ -63,7 +55,7 @@ describe.each(runtimes)('unstable_after() in %s runtime', (runtimeValue) => {
     })
   })
 
-  itMaybe('runs in server actions', async () => {
+  it('runs in server actions', async () => {
     const browser = await next.browser(pathPrefix + '/123/with-action')
     expect(getLogs()).toContainEqual({
       source: '[layout] /[id]',
@@ -84,7 +76,7 @@ describe.each(runtimes)('unstable_after() in %s runtime', (runtimeValue) => {
     // TODO: server seems to close before the response fully returns?
   })
 
-  itMaybe('runs callbacks from nested unstable_after calls', async () => {
+  it('runs callbacks from nested unstable_after calls', async () => {
     await next.browser(pathPrefix + '/nested-after')
 
     await retry(() => {
@@ -101,7 +93,7 @@ describe.each(runtimes)('unstable_after() in %s runtime', (runtimeValue) => {
   })
 
   describe('interrupted RSC renders', () => {
-    itMaybe('runs callbacks if redirect() was called', async () => {
+    it('runs callbacks if redirect() was called', async () => {
       await next.browser(pathPrefix + '/interrupted/calls-redirect')
 
       await retry(() => {
@@ -114,15 +106,14 @@ describe.each(runtimes)('unstable_after() in %s runtime', (runtimeValue) => {
       })
     })
 
-    itMaybe('runs callbacks if notFound() was called', async () => {
+    it('runs callbacks if notFound() was called', async () => {
       await next.browser(pathPrefix + '/interrupted/calls-not-found')
       expect(getLogs()).toContainEqual({
         source: '[page] /interrupted/calls-not-found',
       })
     })
 
-    // prettier-ignore
-    itMaybe('runs callbacks if a user error was thrown in the RSC render', async () => {
+    it('runs callbacks if a user error was thrown in the RSC render', async () => {
       await next.browser(pathPrefix + '/interrupted/throws-error')
       expect(getLogs()).toContainEqual({
         source: '[page] /interrupted/throws-error',
@@ -153,8 +144,7 @@ describe.each(runtimes)('unstable_after() in %s runtime', (runtimeValue) => {
   })
 
   if (!isNextDeploy) {
-    // prettier-ignore
-    itMaybe('only runs callbacks after the response is fully sent', async () => {
+    it('only runs callbacks after the response is fully sent', async () => {
       const pageStartedFetching = promiseWithResolvers<void>()
       pageStartedFetching.promise.catch(() => {})
       const shouldSendResponse = promiseWithResolvers<void>()
@@ -239,7 +229,7 @@ describe.each(runtimes)('unstable_after() in %s runtime', (runtimeValue) => {
     })
   }
 
-  itMaybe('runs in generateMetadata()', async () => {
+  it('runs in generateMetadata()', async () => {
     await next.browser(pathPrefix + '/123/with-metadata')
     expect(getLogs()).toContainEqual({
       source: '[metadata] /[id]/with-metadata',
@@ -247,7 +237,7 @@ describe.each(runtimes)('unstable_after() in %s runtime', (runtimeValue) => {
     })
   })
 
-  itMaybe('does not allow modifying cookies in a callback', async () => {
+  it('does not allow modifying cookies in a callback', async () => {
     const EXPECTED_ERROR =
       /An error occurred in a function passed to `unstable_after\(\)`: .+?: Cookies can only be modified in a Server Action or Route Handler\./
 
